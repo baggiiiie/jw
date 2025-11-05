@@ -36,7 +36,12 @@ var statusCmd = &cobra.Command{
 			fmt.Printf("Monitoring %d job(s):\n", len(cfg.Jobs))
 			for _, job := range cfg.Jobs {
 				duration := time.Since(job.StartTime)
-				fmt.Printf("  - %s (monitored for %s)\n", job.URL, formatDuration(duration))
+				line := fmt.Sprintf("  - %s (monitored for %s)", job.URL, formatDuration(duration))
+				if job.LastCheckFailed {
+					fmt.Println(color.YellowText(line))
+				} else {
+					fmt.Println(line)
+				}
 			}
 		}
 	},

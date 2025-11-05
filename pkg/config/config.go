@@ -9,8 +9,9 @@ import (
 )
 
 type Job struct {
-	StartTime time.Time `json:"start_time"`
-	URL       string    `json:"url"`
+	StartTime       time.Time `json:"start_time"`
+	URL             string    `json:"url"`
+	LastCheckFailed bool      `json:"last_check_failed,omitempty"`
 }
 
 type Config struct {
@@ -106,4 +107,11 @@ func (c *Config) RemoveJob(jobURL string) {
 func (c *Config) HasJob(jobURL string) bool {
 	_, exists := c.Jobs[jobURL]
 	return exists
+}
+
+func (c *Config) UpdateJobCheckStatus(jobURL string, failed bool) {
+	if job, exists := c.Jobs[jobURL]; exists {
+		job.LastCheckFailed = failed
+		c.Jobs[jobURL] = job
+	}
 }
