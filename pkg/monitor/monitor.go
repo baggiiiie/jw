@@ -55,22 +55,32 @@ func MonitorJob(jobURL, token string, logger *log.Logger, onFinish func(jobURL s
 			return false
 		}
 
+		logger.Printf("Received status for %s: Building=%v, Result=%s, LastResult=%s", jobNameSafe, status.Building, status.Result, lastResult)
 		updateCheckStatus(false)
 
-		if !status.Building && status.Result != lastResult {
-			result := status.Result
-			if result == "" {
-				result = "UNKNOWN"
+		isFinished := !status.Building && (status.Result == "SUCCESS" || status.Result == "FAILURE" || status.Result == "ABORTED")
+
+		if isFinished && status.Result != lastResult {
+			logger.Printf("Build finished: %s - Status: %s", jobNameSafe, status.Result)
+
+			notificationTitle := "Jenkins Job Completed"
+			if status.Result == "FAILURE" {
+				notificationTitle = "Jenkins Job Failed"
 			}
-			logger.Printf("Build finished: %s - Status: %s", jobNameSafe, result)
-			notify.Send(
-				"Jenkins Job Completed",
-				fmt.Sprintf("Job: %s\nStatus: %s", jobNameSafe, result),
+
+			err := notify.Send(
+				notificationTitle,
+				fmt.Sprintf("Job: %s\nStatus: %s", jobNameSafe, status.Result),
 				jobURL,
 			)
+			if err != nil {
+				logger.Printf("Failed to send notification: %v", err)
+			}
+
 			onFinish(jobURL)
 			return true
 		}
+
 		lastResult = status.Result
 		return false
 	}

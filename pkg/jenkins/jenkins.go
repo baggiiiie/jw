@@ -41,6 +41,5 @@ func GetJobStatus(jenkinsURL, token string) (*JobStatus, int, error) {
 	if err := json.NewDecoder(resp.Body).Decode(&status); err != nil {
 		return nil, resp.StatusCode, err
 	}
-
 	return &status, resp.StatusCode, nil
 }
