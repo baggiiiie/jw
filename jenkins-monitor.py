@@ -187,7 +187,9 @@ def start_daemon(job_urls: list = None):
 
         threads = [t for t in threads if t.is_alive()]
         if not is_initial_load:
-            logger.info(f"Configuration reloaded. Monitoring {len(load_config())} jobs.")
+            logger.info(
+                f"Configuration reloaded. Monitoring {len(load_config())} jobs."
+            )
 
     def sighup_handler(sig, frame):
         reload_config()
@@ -233,7 +235,6 @@ def start_daemon(job_urls: list = None):
             time.sleep(1)
     except KeyboardInterrupt:
         shutdown_handler(None, None)
-
 
 
 def stop_daemon():
@@ -314,7 +315,9 @@ def add_job(job_url: str):
             print("Daemon signaled to start monitoring the new job.")
         except (ProcessLookupError, ValueError):
             logger.warning("Could not signal daemon. Is it running?")
-            print(f"{YELLOW}Could not signal running daemon. Start it to monitor the new job.{ENDC}")
+            print(
+                f"{YELLOW}Could not signal running daemon. Start it to monitor the new job.{ENDC}"
+            )
 
 
 def remove_job(job_url: str):
