@@ -133,7 +133,7 @@ def save_config(jobs: Set[str]):
 
 
 def start_daemon(job_urls: list = None):
-    """Start the daemon"""
+    """Start the daemon and watch for job changes."""
     # Check if already running
     if os.path.exists(PID_FILE):
         try:
@@ -141,62 +141,99 @@ def start_daemon(job_urls: list = None):
                 pid = int(f.read().strip())
             os.kill(pid, 0)  # Check if process exists
             logger.error(f"Daemon already running (PID: {pid})")
-            return False
+            return
         except (ProcessLookupError, ValueError):
             os.remove(PID_FILE)
 
     token = os.environ.get("JENKINS_TOKEN")
     if not token:
         logger.error("JENKINS_TOKEN environment variable not set!")
-        return False
+        return
 
-    # Collect job URLs
-    jobs = load_config()
+    job_states: Dict[str, bool] = {}  # url -> bool (monitoring or not)
+    threads: list[threading.Thread] = []
+
+    def reload_config(is_initial_load=False):
+        """scan config and adjust monitoring threads"""
+        nonlocal job_states, threads
+        if not is_initial_load:
+            logger.info("Reloading configuration by request...")
+
+        new_jobs = load_config()
+        active_jobs = {job for job, active in job_states.items() if active}
+
+        # Stop monitoring jobs that are no longer in config
+        jobs_to_stop = active_jobs - new_jobs
+        for job_url in jobs_to_stop:
+            job_name = job_url.split("/job/")[-1].rstrip("/")
+            logger.info(f"Stopping monitoring for removed job: {job_name}")
+            job_states[job_url] = False
+
+        # Start monitoring new jobs
+        jobs_to_start = new_jobs - active_jobs
+        for job_url in jobs_to_start:
+            job_name = job_url.split("/job/")[-1].rstrip("/")
+            if job_url in job_states:  # Restarting a previously stopped job
+                logger.info(f"Resuming monitoring for job: {job_name}")
+            else:
+                logger.info(f"Starting to monitor new job: {job_name}")
+
+            job_states[job_url] = True
+            thread = threading.Thread(
+                target=monitor_job, args=(job_url, token, job_states), daemon=True
+            )
+            thread.start()
+            threads.append(thread)
+
+        threads = [t for t in threads if t.is_alive()]
+        if not is_initial_load:
+            logger.info(f"Configuration reloaded. Monitoring {len(load_config())} jobs.")
+
+    def sighup_handler(sig, frame):
+        reload_config()
+
+    def shutdown_handler(sig, frame):
+        logger.info("Shutdown signal received, stopping all monitors.")
+        for job_url in list(job_states.keys()):
+            job_states[job_url] = False
+        for thread in threads:
+            thread.join(timeout=2)
+        if os.path.exists(PID_FILE):
+            os.remove(PID_FILE)
+        logger.info("Daemon stopped.")
+        sys.exit(0)
+
+    # Register signal handlers
+    signal.signal(signal.SIGTERM, shutdown_handler)
+    signal.signal(signal.SIGINT, shutdown_handler)
+    signal.signal(signal.SIGHUP, sighup_handler)
+
+    # Initial jobs from command line and config
+    initial_jobs = load_config()
     if job_urls:
-        jobs.update(job_urls)
+        initial_jobs.update(job_urls)
+    if initial_jobs:
+        save_config(initial_jobs)
 
-    if not jobs:
-        logger.error("No job URLs provided or configured")
-        return False
-
-    # Save PID
+    # Write PID file
     with open(PID_FILE, "w") as f:
         f.write(str(os.getpid()))
 
     logger.info(f"Jenkins monitor daemon started (PID: {os.getpid()})")
-    logger.info(f"Monitoring {len(jobs)} job(s)")
+    reload_config(is_initial_load=True)  # Perform initial load
 
-    # Store job states (thread-safe dict)
-    job_states = {job: True for job in jobs}
-    threads = []
-
-    # Start monitoring thread for each job
-    for job_url in jobs:
-        thread = threading.Thread(
-            target=monitor_job, args=(job_url, token, job_states), daemon=True
-        )
-        thread.start()
-        threads.append(thread)
-
-    # Handle graceful shutdown
-    def signal_handler(sig, frame):
-        logger.info("Shutdown signal received")
-        for job in job_states:
-            job_states[job] = False
-        for thread in threads:
-            thread.join(timeout=2)
-        os.remove(PID_FILE)
-        sys.exit(0)
-
-    signal.signal(signal.SIGTERM, signal_handler)
-    signal.signal(signal.SIGINT, signal_handler)
+    if not load_config():
+        logger.info("No jobs configured. Use 'add' command to add jobs.")
+    else:
+        logger.info(f"Monitoring {len(load_config())} job(s).")
 
     # Keep daemon running
     try:
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
-        signal_handler(None, None)
+        shutdown_handler(None, None)
+
 
 
 def stop_daemon():
@@ -208,15 +245,22 @@ def stop_daemon():
     try:
         with open(PID_FILE) as f:
             pid = int(f.read().strip())
-        os.kill(pid, 15)  # SIGTERM
+        os.kill(pid, signal.SIGTERM)
         logger.info(f"Sent SIGTERM to daemon (PID: {pid})")
-        time.sleep(1)
+
+        # Wait a moment for daemon to shut down
+        time.sleep(2)
+        if not os.path.exists(PID_FILE):
+            print(f"{GREEN}Daemon stopped successfully{ENDC}")
+        else:
+            print(f"{YELLOW}Daemon may still be shutting down. Check 'status'.{ENDC}")
+
+    except ProcessLookupError:
+        logger.warning("Daemon process not found, removing stale PID file.")
         os.remove(PID_FILE)
-        print(f"{GREEN}Daemon stopped{ENDC}")
-    except (ProcessLookupError, ValueError, FileNotFoundError):
-        if os.path.exists(PID_FILE):
-            os.remove(PID_FILE)
-        logger.warning("Could not stop daemon")
+        print(f"{RED}Daemon was not running (stale PID removed){ENDC}")
+    except (ValueError, FileNotFoundError):
+        print(f"{YELLOW}Daemon not running{ENDC}")
 
 
 def get_status():
@@ -251,10 +295,26 @@ def get_status():
 def add_job(job_url: str):
     """Add a job to monitor"""
     jobs = load_config()
+    if job_url in jobs:
+        print(f"{YELLOW}Job is already being monitored: {job_url}{ENDC}")
+        return
+
     jobs.add(job_url)
     save_config(jobs)
-    print(f"{GREEN}Added job: {job_url}{ENDC}")
-    logger.info(f"Job added: {job_url}")
+    print(f"{GREEN}Added job to config: {job_url}{ENDC}")
+    logger.info(f"Job added to config: {job_url}")
+
+    # Signal daemon to reload config
+    if os.path.exists(PID_FILE):
+        try:
+            with open(PID_FILE) as f:
+                pid = int(f.read().strip())
+            os.kill(pid, signal.SIGHUP)
+            logger.info(f"Signaled daemon (PID: {pid}) to reload configuration.")
+            print("Daemon signaled to start monitoring the new job.")
+        except (ProcessLookupError, ValueError):
+            logger.warning("Could not signal daemon. Is it running?")
+            print(f"{YELLOW}Could not signal running daemon. Start it to monitor the new job.{ENDC}")
 
 
 def remove_job(job_url: str):
@@ -263,10 +323,21 @@ def remove_job(job_url: str):
     if job_url in jobs:
         jobs.remove(job_url)
         save_config(jobs)
-        print(f"{GREEN}Removed job: {job_url}{ENDC}")
-        logger.info(f"Job removed: {job_url}")
+        print(f"{GREEN}Removed job from config: {job_url}{ENDC}")
+        logger.info(f"Job removed from config: {job_url}")
+
+        # Signal daemon to reload config
+        if os.path.exists(PID_FILE):
+            try:
+                with open(PID_FILE) as f:
+                    pid = int(f.read().strip())
+                os.kill(pid, signal.SIGHUP)
+                logger.info(f"Signaled daemon (PID: {pid}) to reload configuration.")
+                print("Daemon signaled to stop monitoring the job.")
+            except (ProcessLookupError, ValueError):
+                logger.warning("Could not signal daemon. Is it running?")
     else:
-        print(f"{YELLOW}Job not found: {job_url}{ENDC}")
+        print(f"{YELLOW}Job not found in config: {job_url}{ENDC}")
 
 
 def main():
