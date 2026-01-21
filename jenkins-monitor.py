@@ -56,7 +56,11 @@ logger = setup_logging()
 def send_macos_notification(title, message):
     """Send macOS system notification"""
     cmd = f"terminal-notifier -message '{message}' -title '{title}' -sound ping"
-    subprocess.run(cmd, shell=True, check=False)
+    result = subprocess.run(cmd, shell=True, check=False, capture_output=True, text=True)
+    if result.returncode == 0:
+        logger.info(f"Notification sent successfully: {cmd}")
+    else:
+        logger.error(f"Failed to send notification: {cmd}. Stderr: {result.stderr.strip()}")
 
 
 def get_job_status(jenkins_url, token):
