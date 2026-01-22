@@ -2,12 +2,19 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 )
 
+type Job struct {
+	StartTime time.Time `json:"start_time"`
+	URL       string    `json:"url"`
+}
+
 type Config struct {
-	Jobs []string `json:"jobs"`
+	Jobs map[string]Job `json:"jobs"`
 }
 
 func GetConfigPath() (string, error) {
@@ -27,14 +34,42 @@ func Load() (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return &Config{Jobs: []string{}}, nil
+			return &Config{Jobs: make(map[string]Job)}, nil
 		}
 		return nil, err
 	}
 
+	// First, try to unmarshal into the modern map-based struct.
 	var config Config
-	if err := json.Unmarshal(data, &config); err != nil {
-		return nil, err
+	if err := json.Unmarshal(data, &config); err == nil {
+		// If jobs is nil (e.g., empty "{}" config file), initialize it.
+		if config.Jobs == nil {
+			config.Jobs = make(map[string]Job)
+		}
+		return &config, nil
+	}
+
+	// If the modern unmarshal failed, it might be the legacy array format.
+	var legacyConfig struct {
+		Jobs []string `json:"jobs"`
+	}
+	if err := json.Unmarshal(data, &legacyConfig); err != nil {
+		// If this also fails, the config is truly corrupt or in an unknown format.
+		return nil, fmt.Errorf("failed to unmarshal config as modern or legacy format: %w", err)
+	}
+
+	// If we've successfully unmarshaled the legacy format, migrate it.
+	config.Jobs = make(map[string]Job)
+	for _, jobURL := range legacyConfig.Jobs {
+		config.Jobs[jobURL] = Job{
+			StartTime: time.Now(),
+			URL:       jobURL,
+		}
+	}
+
+	// Save the newly migrated config.
+	if err := config.Save(); err != nil {
+		return nil, fmt.Errorf("failed to save migrated config: %w", err)
 	}
 
 	return &config, nil
@@ -54,30 +89,21 @@ func (c *Config) Save() error {
 	return os.WriteFile(path, data, 0644)
 }
 
-func (c *Config) AddJob(job string) {
-	for _, j := range c.Jobs {
-		if j == job {
-			return
-		}
+func (c *Config) AddJob(jobURL string) {
+	if _, exists := c.Jobs[jobURL]; exists {
+		return
 	}
-	c.Jobs = append(c.Jobs, job)
+	c.Jobs[jobURL] = Job{
+		StartTime: time.Now(),
+		URL:       jobURL,
+	}
 }
 
-func (c *Config) RemoveJob(job string) {
-	var newJobs []string
-	for _, j := range c.Jobs {
-		if j != job {
-			newJobs = append(newJobs, j)
-		}
-	}
-	c.Jobs = newJobs
+func (c *Config) RemoveJob(jobURL string) {
+	delete(c.Jobs, jobURL)
 }
 
-func (c *Config) HasJob(job string) bool {
-	for _, j := range c.Jobs {
-		if j == job {
-			return true
-		}
-	}
-	return false
+func (c *Config) HasJob(jobURL string) bool {
+	_, exists := c.Jobs[jobURL]
+	return exists
 }

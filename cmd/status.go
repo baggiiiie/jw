@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"jenkins-monitor/pkg/color"
 	"jenkins-monitor/pkg/config"
@@ -34,10 +35,27 @@ var statusCmd = &cobra.Command{
 		} else {
 			fmt.Printf("Monitoring %d job(s):\n", len(cfg.Jobs))
 			for _, job := range cfg.Jobs {
-				fmt.Printf("  - %s\n", job)
+				duration := time.Since(job.StartTime)
+				fmt.Printf("  - %s (monitored for %s)\n", job.URL, formatDuration(duration))
 			}
 		}
 	},
+}
+
+func formatDuration(d time.Duration) string {
+	d = d.Round(time.Minute)
+	days := d / (24 * time.Hour)
+	d -= days * 24 * time.Hour
+	hrs := d / time.Hour
+	d -= hrs * time.Hour
+	mins := d / time.Minute
+	if days > 0 {
+		return fmt.Sprintf("%dd %dh %dm", days, hrs, mins)
+	}
+	if hrs > 0 {
+		return fmt.Sprintf("%dh %dm", hrs, mins)
+	}
+	return fmt.Sprintf("%dm", mins)
 }
 
 func init() {

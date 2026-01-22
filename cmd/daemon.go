@@ -83,7 +83,7 @@ func startDaemon(cmd *cobra.Command, args []string) {
 
 		currentConfigJobs := make(map[string]bool)
 		for _, job := range cfg.Jobs {
-			currentConfigJobs[job] = true
+			currentConfigJobs[job.URL] = true
 		}
 
 		for jobURL, stopChan := range activeJobs {
