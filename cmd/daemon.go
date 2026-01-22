@@ -22,7 +22,6 @@ var startDaemonCmd = &cobra.Command{
 	Run:    startDaemon,
 }
 
-
 func init() {
 	RootCmd.AddCommand(startDaemonCmd)
 }
@@ -65,7 +64,7 @@ func startDaemon(cmd *cobra.Command, args []string) {
 		if err := cfg.Save(); err != nil {
 			logger.Printf("Error saving config after removing finished job: %v", err)
 		}
-		
+
 		if stopChan, exists := activeJobs[jobURL]; exists {
 			delete(activeJobs, jobURL)
 			close(stopChan)
@@ -75,7 +74,7 @@ func startDaemon(cmd *cobra.Command, args []string) {
 	reloadConfigAndJobs := func() {
 		mu.Lock()
 		defer mu.Unlock()
-		
+
 		cfg, err := config.Load()
 		if err != nil {
 			logger.Printf("Error loading config: %v", err)
@@ -110,7 +109,7 @@ func startDaemon(cmd *cobra.Command, args []string) {
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
 
 	reloadConfigAndJobs()
-	
+
 	for {
 		select {
 		case sig := <-sigChan:
@@ -136,13 +135,12 @@ func startDaemon(cmd *cobra.Command, args []string) {
 			if len(cfg.Jobs) == 0 {
 				logger.Println("No more jobs to monitor. Shutting down daemon.")
 				mu.Unlock()
-				return 
+				return
 			}
 			mu.Unlock()
 		}
 	}
 }
-
 
 func init() {
 	RootCmd.AddCommand(startDaemonCmd)

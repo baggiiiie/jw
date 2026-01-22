@@ -27,7 +27,6 @@ var addCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		
 		if cfg.HasJob(jobURL) {
 			fmt.Println(color.YellowText("Job is already being monitored: " + jobURL))
 			return

@@ -14,7 +14,7 @@ type JobStatus struct {
 
 func GetJobStatus(jenkinsURL, token string) (*JobStatus, error) {
 	apiURL := jenkinsURL + "/api/json?tree=building,result"
-	
+
 	req, err := http.NewRequest("GET", apiURL, nil)
 	if err != nil {
 		return nil, err
@@ -32,7 +32,7 @@ func GetJobStatus(jenkinsURL, token string) (*JobStatus, error) {
 	if resp.StatusCode == http.StatusNotFound {
 		return nil, fmt.Errorf("job not found (404)")
 	}
-	
+
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("http error: %s", resp.Status)
 	}

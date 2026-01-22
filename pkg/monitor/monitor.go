@@ -56,7 +56,7 @@ func MonitorJob(jobURL, token string, logger *log.Logger, onFinish func(jobURL s
 		lastResult = status.Result
 		return false
 	}
-	
+
 	if checkJobStatus() {
 		return
 	}

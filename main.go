@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 
-	_ "jenkins-monitor/cmd"
 	"jenkins-monitor/cmd"
 )
 

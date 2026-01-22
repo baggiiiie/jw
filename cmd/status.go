@@ -2,17 +2,19 @@ package cmd
 
 import (
 	"fmt"
+	"os"
+
 	"jenkins-monitor/pkg/color"
 	"jenkins-monitor/pkg/config"
 	"jenkins-monitor/pkg/pidfile"
-	"os"
 
 	"github.com/spf13/cobra"
 )
 
 var statusCmd = &cobra.Command{
-	Use:   "status",
-	Short: "Get the status of the jenkins-monitor daemon",
+	Use:     "status",
+	Aliases: []string{"st"},
+	Short:   "Get the status of the jenkins-monitor daemon",
 	Run: func(cmd *cobra.Command, args []string) {
 		if pid, running := pidfile.IsDaemonRunning(); running {
 			fmt.Println(color.GreenText(fmt.Sprintf("Daemon running (PID: %d)", pid)))
