@@ -77,6 +77,8 @@ func MonitorJob(jobURL, token string, logger *log.Logger, onFinish func(jobURL s
 				)
 				if err != nil {
 					logger.Printf("Failed to send notification: %v", err)
+				} else {
+					logger.Printf("Sent notification for %s", jobURL)
 				}
 			} else {
 				logger.Printf("Build already finished: %s - Status: %s (removing without notification)", jobNameSafe, status.Result)
