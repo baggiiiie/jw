@@ -2,12 +2,12 @@ package cmd
 
 import (
 	"fmt"
-	"os"
-	"time"
-
 	"jenkins-monitor/pkg/color"
 	"jenkins-monitor/pkg/config"
 	"jenkins-monitor/pkg/pidfile"
+	"os"
+	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -42,7 +42,9 @@ var statusCmd = &cobra.Command{
 			fmt.Printf("Monitoring %d job(s):\n", len(cfg.Jobs))
 			for _, job := range cfg.Jobs {
 				duration := time.Since(job.StartTime)
-				line := fmt.Sprintf("  - %s (monitored for %s)", job.URL, formatDuration(duration))
+				urlParts := strings.Split(job.URL, "/")
+				url := strings.Join(urlParts[len(urlParts)-3:], "/")
+				line := fmt.Sprintf("  - %s (monitored for %s)", url, formatDuration(duration))
 				if job.LastCheckFailed {
 					fmt.Println(color.YellowText(line))
 				} else {

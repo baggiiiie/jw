@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"jenkins-monitor/pkg/config"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
@@ -63,7 +64,9 @@ func runTUI() {
 				status = "Failing"
 				statusColor = tcell.ColorRed
 			}
-			table.SetCell(i, 0, tview.NewTableCell(job.URL))
+			urlParts := strings.Split(job.URL, "/")
+			url := strings.Join(urlParts[len(urlParts)-3:], "/")
+			table.SetCell(i, 0, tview.NewTableCell(url))
 			table.SetCell(i, 1, tview.NewTableCell(status).SetTextColor(statusColor))
 			table.SetCell(i, 2, tview.NewTableCell(formatDuration(duration)))
 			i++
