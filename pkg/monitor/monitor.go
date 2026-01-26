@@ -56,7 +56,7 @@ func MonitorJob(jobURL, token string, logger *log.Logger, onFinish func(jobURL s
 		}
 
 		logger.Printf("Received status for %s: Building=%v, Result=%s, LastResult=%s", jobNameSafe, status.Building, status.Result, lastResult)
-		updateCheckStatus(false)
+		updateCheckStatus(status.Result == "FAILURE")
 
 		isFinished := !status.Building && (status.Result == "SUCCESS" || status.Result == "FAILURE" || status.Result == "ABORTED")
 
