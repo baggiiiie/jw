@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 )
 
@@ -16,6 +17,7 @@ type Job struct {
 
 type Config struct {
 	Jobs map[string]Job `json:"jobs"`
+	mu   sync.Mutex
 }
 
 func GetConfigPath() (string, error) {
@@ -77,6 +79,9 @@ func Load() (*Config, error) {
 }
 
 func (c *Config) Save() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	path, err := GetConfigPath()
 	if err != nil {
 		return err
