@@ -60,23 +60,29 @@ func MonitorJob(jobURL, token string, logger *log.Logger, onFinish func(jobURL s
 
 		isFinished := !status.Building && (status.Result == "SUCCESS" || status.Result == "FAILURE" || status.Result == "ABORTED")
 
-		if isFinished && status.Result != lastResult {
-			logger.Printf("Build finished: %s - Status: %s", jobNameSafe, status.Result)
+		if isFinished {
+			// Only send notification if result changed (avoid duplicates)
+			if status.Result != lastResult {
+				logger.Printf("Build finished: %s - Status: %s", jobNameSafe, status.Result)
 
-			notificationTitle := "Jenkins Job Completed"
-			if status.Result == "FAILURE" {
-				notificationTitle = "Jenkins Job Failed"
+				notificationTitle := "Jenkins Job Completed"
+				if status.Result == "FAILURE" {
+					notificationTitle = "Jenkins Job Failed"
+				}
+
+				err := notify.Send(
+					notificationTitle,
+					fmt.Sprintf("Job: %s\nStatus: %s", jobNameSafe, status.Result),
+					jobURL,
+				)
+				if err != nil {
+					logger.Printf("Failed to send notification: %v", err)
+				}
+			} else {
+				logger.Printf("Build already finished: %s - Status: %s (removing without notification)", jobNameSafe, status.Result)
 			}
 
-			err := notify.Send(
-				notificationTitle,
-				fmt.Sprintf("Job: %s\nStatus: %s", jobNameSafe, status.Result),
-				jobURL,
-			)
-			if err != nil {
-				logger.Printf("Failed to send notification: %v", err)
-			}
-
+			// Always remove finished jobs
 			onFinish(jobURL)
 			return true
 		}
