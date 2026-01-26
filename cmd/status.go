@@ -12,11 +12,17 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var tui bool
+
 var statusCmd = &cobra.Command{
 	Use:     "status",
 	Aliases: []string{"st"},
 	Short:   "Get the status of the jenkins-monitor daemon",
 	Run: func(cmd *cobra.Command, args []string) {
+		if tui {
+			runTUI()
+			return
+		}
 		if pid, running := pidfile.IsDaemonRunning(); running {
 			fmt.Println(color.GreenText(fmt.Sprintf("Daemon running (PID: %d)", pid)))
 		} else {
@@ -65,4 +71,5 @@ func formatDuration(d time.Duration) string {
 
 func init() {
 	RootCmd.AddCommand(statusCmd)
+	statusCmd.Flags().BoolVar(&tui, "tui", false, "Display status in a TUI table")
 }
