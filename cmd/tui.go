@@ -11,16 +11,33 @@ import (
 )
 
 func runTUI() {
+	// Initial check to prevent TUI from starting if there are no jobs.
+	initialCfg, err := config.Load()
+	if err != nil {
+		fmt.Printf("Error loading config: %v\n", err)
+		return
+	}
+	if len(initialCfg.Jobs) == 0 {
+		fmt.Println("No jobs in the watch list. TUI will not start.")
+		return
+	}
+
 	app := tview.NewApplication()
 	table := tview.NewTable().
 		SetBorders(true)
 
-	// Function to update the table data
+	// updateTableContent refreshes the table view with the latest job statuses.
+	// It will stop the application if the job list becomes empty.
 	updateTableContent := func() {
 		cfg, err := config.Load()
 		if err != nil {
-			// Handle error, maybe show it in the TUI
 			log.Printf("Error loading config: %v", err)
+			return
+		}
+
+		// If the job list is empty, stop the TUI.
+		if len(cfg.Jobs) == 0 {
+			app.Stop()
 			return
 		}
 
@@ -53,33 +70,33 @@ func runTUI() {
 		}
 	}
 
-	// Initial table update
+	// Initial table population
 	updateTableContent()
 
-	// Create a channel to signal the ticker goroutine to stop
+	// done channel is used to signal the ticker goroutine to stop.
 	done := make(chan struct{})
 
-	// Set up a ticker to refresh the table every 5 seconds
+	// Refresh the table every 5 seconds.
 	ticker := time.NewTicker(5 * time.Second)
 	go func() {
-		defer ticker.Stop() // Ensure ticker is stopped when goroutine exits
+		defer ticker.Stop()
 		for {
 			select {
 			case <-ticker.C:
 				app.QueueUpdateDraw(func() {
 					updateTableContent()
 				})
-			case <-done: // Listen for signal to exit
+			case <-done:
 				return
 			}
 		}
 	}()
 
-	// Run the tview application. This call blocks until the application exits.
+	// Run the application.
 	if err := app.SetRoot(table, true).Run(); err != nil {
 		fmt.Printf("Error running TUI: %v\n", err)
 	}
 
-	// Signal the ticker goroutine to stop after the tview app has exited
+	// Signal the ticker to stop.
 	close(done)
 }
