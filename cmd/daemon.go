@@ -17,7 +17,7 @@ import (
 )
 
 var startDaemonCmd = &cobra.Command{
-	Use:    "_start_daemon",
+	Use:    "_start_jw_daemon",
 	Short:  "Starts the daemon process (internal use)",
 	Hidden: true,
 	Run:    startDaemon,
@@ -131,6 +131,11 @@ func startDaemon(cmd *cobra.Command, args []string) {
 				return
 			}
 		case <-time.After(5 * time.Second):
+			// Periodically ensure PID file exists (self-healing)
+			if err := pidfile.CheckAndRestore(); err != nil {
+				logger.Printf("Failed to verify/restore PID file: %v", err)
+			}
+
 			mu.Lock()
 			cfg, _ := config.Load()
 			if len(cfg.Jobs) == 0 {
