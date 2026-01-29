@@ -17,9 +17,15 @@ type Job struct {
 	LastCheckFailed bool      `json:"last_check_failed,omitempty"`
 }
 
+type UpgradeCheck struct {
+	LastChecked   time.Time `json:"last_checked"`
+	LatestVersion string    `json:"latest_version"`
+}
+
 type Config struct {
-	Jobs map[string]Job `json:"jobs"`
-	mu   sync.Mutex
+	Jobs         map[string]Job `json:"jobs"`
+	UpgradeState UpgradeCheck   `json:"upgrade_check"`
+	mu           sync.Mutex
 }
 
 func GetConfigPath() (string, error) {
