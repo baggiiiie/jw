@@ -15,11 +15,18 @@ var addCmd = &cobra.Command{
 	Short: "Add a Jenkins job to monitor",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
+		if os.Getenv("JENKINS_TOKEN") == "" {
+			fmt.Println(color.RedText("Error: JENKINS_TOKEN environment variable is not set"))
+			os.Exit(1)
+		}
+
 		jobURL := args[0]
 		if !strings.HasPrefix(jobURL, "http://") && !strings.HasPrefix(jobURL, "https://") {
 			fmt.Println(color.RedText("Error: Job URL must start with http:// or https://"))
 			os.Exit(1)
 		}
+
+		ensureDaemonRunning()
 
 		cfg, err := config.Load()
 		if err != nil {
@@ -41,11 +48,8 @@ var addCmd = &cobra.Command{
 
 		fmt.Println(color.GreenText("Added job to config: " + jobURL))
 
-		if signalDaemonReload() {
-			fmt.Println("Daemon signaled to monitor the new job.")
-		} else {
-			ensureDaemonRunning()
-		}
+		signalDaemonReload()
+		fmt.Println("Daemon signaled to monitor the new job.")
 	},
 }
 
