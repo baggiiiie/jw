@@ -1,16 +1,17 @@
 package cmd
 
 import (
-	"jenkins-monitor/pkg/config"
-	"jenkins-monitor/pkg/logging"
-	"jenkins-monitor/pkg/monitor"
-	"jenkins-monitor/pkg/pidfile"
 	"log"
 	"os"
 	"os/signal"
 	"sync"
 	"syscall"
 	"time"
+
+	"jenkins-monitor/pkg/config"
+	"jenkins-monitor/pkg/logging"
+	"jenkins-monitor/pkg/monitor"
+	"jenkins-monitor/pkg/pidfile"
 
 	"github.com/spf13/cobra"
 )

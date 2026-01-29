@@ -9,6 +9,8 @@ import (
 	"time"
 )
 
+const configFileName = ".jenkins_monitor_jobs.json"
+
 type Job struct {
 	StartTime       time.Time `json:"start_time"`
 	URL             string    `json:"url"`
@@ -25,7 +27,7 @@ func GetConfigPath() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".jenkins_monitor_jobs.json"), nil
+	return filepath.Join(home, configFileName), nil
 }
 
 func Load() (*Config, error) {
@@ -92,7 +94,7 @@ func (c *Config) Save() error {
 		return err
 	}
 
-	return os.WriteFile(path, data, 0644)
+	return os.WriteFile(path, data, 0o644)
 }
 
 func (c *Config) AddJob(jobURL string) {

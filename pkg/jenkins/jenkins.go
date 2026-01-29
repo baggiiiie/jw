@@ -1,3 +1,4 @@
+// Package jenkins interacts with Jenkins API
 package jenkins
 
 import (
@@ -7,13 +8,18 @@ import (
 	"time"
 )
 
+const httpTimeout = 30 * time.Second
+
 type JobStatus struct {
-	Building bool   `json:"building"`
-	Result   string `json:"result"`
+	Building  bool   `json:"building"`
+	Result    string `json:"result"`
+	Timestamp int64  `json:"timestamp"`
 }
 
+// GetJobStatus fetches the status of a Jenkins job, and returns the JobStatus
+// struct, http status code, and error if any.
 func GetJobStatus(jenkinsURL, token string) (*JobStatus, int, error) {
-	apiURL := jenkinsURL + "/api/json?tree=building,result"
+	apiURL := jenkinsURL + "/api/json?tree=building,result,timestamp"
 
 	req, err := http.NewRequest("GET", apiURL, nil)
 	if err != nil {
@@ -22,7 +28,7 @@ func GetJobStatus(jenkinsURL, token string) (*JobStatus, int, error) {
 
 	req.Header.Set("Authorization", "Basic "+token)
 
-	client := &http.Client{Timeout: 30 * time.Second}
+	client := &http.Client{Timeout: httpTimeout}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, 0, err
