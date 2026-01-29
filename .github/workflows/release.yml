@@ -1,0 +1,66 @@
+name: JW Release
+
+on:
+  release:
+    types: [created]
+
+jobs:
+  build:
+    name: Build and Publish
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [darwin]
+        arch: [amd64, arm64]
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache-dependency-path: go.sum
+
+      - name: Get version
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Build binary
+        env:
+          CGO_ENABLED: 0
+          GOOS: ${{ matrix.os }}
+          GOARCH: ${{ matrix.arch }}
+          VERSION: ${{ steps.version.outputs.VERSION }}
+        run: |
+          OUTPUT="jw-${{ matrix.os }}-${{ matrix.arch }}"
+          go build \
+            -ldflags "-s -w -X jenkins-monitor/pkg/version.Version=$VERSION" \
+            -trimpath \
+            -o "$OUTPUT"
+
+      - name: Upload release binary
+        uses: softprops/action-gh-release@v2
+        with:
+          files: jw-${{ matrix.os }}-${{ matrix.arch }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  update-homebrew:
+    name: Update Homebrew Tap
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger tap update
+        run: |
+          gh workflow run update-formula.yml \
+            -f version=${{ github.event.release.tag_name }} \
+            -f formula=jw \
+            -f repo=baggiiiie/jw \
+            -R baggiiiie/homebrew-tap
+        env:
+          GITHUB_TOKEN: ${{ secrets.TAP_UPDATE_TOKEN }}
