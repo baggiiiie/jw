@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"syscall"
@@ -14,7 +15,7 @@ import (
 func signalDaemonReload() bool {
 	if pid, running := pidfile.IsDaemonRunning(); running {
 		if process, err := os.FindProcess(pid); err == nil {
-			fmt.Println("Signaling daemon to reload config...")
+			log.Println("Signaling daemon to reload config...")
 			process.Signal(syscall.SIGHUP)
 			return true
 		}
