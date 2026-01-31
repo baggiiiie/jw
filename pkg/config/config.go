@@ -2,7 +2,6 @@ package config
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -50,39 +49,14 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 
-	// First, try to unmarshal into the modern map-based struct.
 	var config Config
-	if err := json.Unmarshal(data, &config); err == nil {
-		// If jobs is nil (e.g., empty "{}" config file), initialize it.
-		if config.Jobs == nil {
-			config.Jobs = make(map[string]Job)
-		}
-		return &config, nil
+	if err := json.Unmarshal(data, &config); err != nil {
+		return nil, err
 	}
 
-	// If the modern unmarshal failed, it might be the legacy array format.
-	var legacyConfig struct {
-		Jobs []string `json:"jobs"`
+	if config.Jobs == nil {
+		config.Jobs = make(map[string]Job)
 	}
-	if err := json.Unmarshal(data, &legacyConfig); err != nil {
-		// If this also fails, the config is truly corrupt or in an unknown format.
-		return nil, fmt.Errorf("failed to unmarshal config as modern or legacy format: %w", err)
-	}
-
-	// If we've successfully unmarshaled the legacy format, migrate it.
-	config.Jobs = make(map[string]Job)
-	for _, jobURL := range legacyConfig.Jobs {
-		config.Jobs[jobURL] = Job{
-			StartTime: time.Now(),
-			URL:       jobURL,
-		}
-	}
-
-	// Save the newly migrated config.
-	if err := config.Save(); err != nil {
-		return nil, fmt.Errorf("failed to save migrated config: %w", err)
-	}
-
 	return &config, nil
 }
 
