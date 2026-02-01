@@ -1,3 +1,4 @@
+// Package config manages the configuration for monitored jobs
 package config
 
 import (
@@ -9,7 +10,10 @@ import (
 	"time"
 )
 
-const configFileName = ".jenkins_monitor_jobs.json"
+const (
+	configDirName  = ".jw"
+	configFileName = "monitored_jobs.json"
+)
 
 type Job struct {
 	StartTime       time.Time `json:"start_time"`
@@ -38,7 +42,8 @@ func GetConfigPath() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, configFileName), nil
+	configDir := filepath.Join(home, configDirName)
+	return filepath.Join(configDir, configFileName), nil
 }
 
 // loadFromDisk reads the config file from disk.
@@ -102,6 +107,12 @@ func (c *Config) Save() error {
 
 	path, err := GetConfigPath()
 	if err != nil {
+		return err
+	}
+
+	// Ensure config directory exists
+	configDir := filepath.Dir(path)
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
 		return err
 	}
 
