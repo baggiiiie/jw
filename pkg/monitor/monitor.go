@@ -103,7 +103,7 @@ func isFinalStatus(result string) bool {
 	return result == "SUCCESS" || result == "FAILURE" || result == "ABORTED"
 }
 
-// updateJobCheckStatusInConfig loads the config, updates the check status for a job, and saves it.
+// updateJobCheckStatusInConfig updates the check status for a job and saves to disk.
 func updateJobCheckStatusInConfig(jobURL string, failed bool, logger *log.Logger) {
 	cfg, err := config.Load()
 	if err != nil {

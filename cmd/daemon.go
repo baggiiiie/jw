@@ -4,7 +4,6 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"sync"
 	"syscall"
 	"time"
 
@@ -25,6 +24,46 @@ var startDaemonCmd = &cobra.Command{
 
 func init() {
 	RootCmd.AddCommand(startDaemonCmd)
+}
+
+func onJobFinish(jobURL string, cfg *config.Config, logger *log.Logger, activeJobs map[string]chan struct{}) {
+	cfg.RemoveJob(jobURL)
+	if err := cfg.Save(); err != nil {
+		logger.Printf("Error saving config after removing finished job: %v", err)
+	}
+
+	if stopChan, exists := activeJobs[jobURL]; exists {
+		delete(activeJobs, jobURL)
+		close(stopChan)
+	}
+}
+
+func reloadConfigAndJobs(token string, logger *log.Logger, cfg *config.Config, activeJobs map[string]chan struct{}, onJobFinish func(string)) {
+	reloadedCfg, err := config.Reload()
+	if err != nil {
+		logger.Printf("Error reloading config: %v", err)
+		return
+	}
+
+	currentConfigJobs := reloadedCfg.GetJobs()
+
+	for jobURL, stopChan := range activeJobs {
+		if _, exists := currentConfigJobs[jobURL]; !exists {
+			logger.Printf("Stopping monitoring for removed job: %s", jobURL)
+			delete(activeJobs, jobURL)
+			close(stopChan)
+		}
+	}
+
+	for jobURL := range currentConfigJobs {
+		if _, running := activeJobs[jobURL]; !running {
+			logger.Printf("Starting to monitor new job: %s", jobURL)
+			stopChan := make(chan struct{})
+			activeJobs[jobURL] = stopChan
+			go monitor.MonitorJob(jobURL, token, logger, onJobFinish, stopChan)
+		}
+	}
+	logger.Printf("Configuration reloaded. Monitoring %d jobs.", len(activeJobs))
 }
 
 func startDaemon(cmd *cobra.Command, args []string) {
@@ -51,69 +90,23 @@ func startDaemon(cmd *cobra.Command, args []string) {
 
 	activeJobs := make(map[string]chan struct{})
 
-	// daemon is the single consumer of config, we implement mutex at the
-	// callee-level
-	var mu sync.Mutex
-
-	// onJobFinish loads config, removes job from config, and saves file
-	onJobFinish := func(jobURL string) {
-		mu.Lock()
-		defer mu.Unlock()
-
-		cfg, err := config.Load()
-		if err != nil {
-			logger.Printf("Error loading config to remove finished job: %v", err)
-			return
-		}
-		cfg.RemoveJob(jobURL)
-		if err := cfg.Save(); err != nil {
-			logger.Printf("Error saving config after removing finished job: %v", err)
-		}
-
-		if stopChan, exists := activeJobs[jobURL]; exists {
-			delete(activeJobs, jobURL)
-			close(stopChan)
-		}
+	cfg, err := config.Load()
+	if err != nil {
+		logger.Fatalf("Failed to load config: %v", err)
 	}
 
-	reloadConfigAndJobs := func() {
-		mu.Lock()
-		defer mu.Unlock()
+	onJobFinishCallback := func(jobURL string) {
+		onJobFinish(jobURL, cfg, logger, activeJobs)
+	}
 
-		cfg, err := config.Load()
-		if err != nil {
-			logger.Printf("Error loading config: %v", err)
-			return
-		}
-
-		currentConfigJobs := make(map[string]bool)
-		for _, job := range cfg.Jobs {
-			currentConfigJobs[job.URL] = true
-		}
-
-		for jobURL, stopChan := range activeJobs {
-			if !currentConfigJobs[jobURL] {
-				logger.Printf("Stopping monitoring for removed job: %s", jobURL)
-				delete(activeJobs, jobURL)
-				close(stopChan)
-			}
-		}
-
-		for jobURL := range currentConfigJobs {
-			if _, running := activeJobs[jobURL]; !running {
-				logger.Printf("Starting to monitor new job: %s", jobURL)
-				stopChan := make(chan struct{})
-				activeJobs[jobURL] = stopChan
-				go monitor.MonitorJob(jobURL, token, logger, onJobFinish, stopChan)
-			}
-		}
-		logger.Printf("Configuration reloaded. Monitoring %d jobs.", len(activeJobs))
+	reloadConfigAndJobsCallback := func() {
+		reloadConfigAndJobs(token, logger, cfg, activeJobs, onJobFinishCallback)
 	}
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
 
-	reloadConfigAndJobs()
+	reloadConfigAndJobsCallback()
 
 	for {
 		select {
@@ -121,15 +114,13 @@ func startDaemon(cmd *cobra.Command, args []string) {
 			switch sig {
 			case syscall.SIGHUP:
 				logger.Println("SIGHUP received, reloading config...")
-				reloadConfigAndJobs()
+				reloadConfigAndJobsCallback()
 			case syscall.SIGINT, syscall.SIGTERM:
 				logger.Println("Shutdown signal received, stopping all monitors.")
-				mu.Lock()
 				for jobURL, stopChan := range activeJobs {
 					logger.Printf("Stopping monitor for %s", jobURL)
 					close(stopChan)
 				}
-				mu.Unlock()
 				time.Sleep(1 * time.Second)
 				logger.Println("Daemon stopped.")
 				return
@@ -140,18 +131,10 @@ func startDaemon(cmd *cobra.Command, args []string) {
 				logger.Printf("Failed to verify/restore PID file: %v", err)
 			}
 
-			mu.Lock()
-			cfg, _ := config.Load()
-			if len(cfg.Jobs) == 0 {
+			if cfg.JobCount() == 0 {
 				logger.Println("No more jobs to monitor. Shutting down daemon.")
-				mu.Unlock()
 				return
 			}
-			mu.Unlock()
 		}
 	}
-}
-
-func init() {
-	RootCmd.AddCommand(startDaemonCmd)
 }
