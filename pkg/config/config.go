@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"sync"
 	"time"
 )
 
@@ -24,7 +23,6 @@ type UpgradeCheck struct {
 type Config struct {
 	Jobs         map[string]Job `json:"jobs"`
 	UpgradeState UpgradeCheck   `json:"upgrade_check"`
-	mu           sync.Mutex
 }
 
 func GetConfigPath() (string, error) {
@@ -61,9 +59,6 @@ func Load() (*Config, error) {
 }
 
 func (c *Config) Save() error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	path, err := GetConfigPath()
 	if err != nil {
 		return err

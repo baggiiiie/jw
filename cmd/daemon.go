@@ -50,8 +50,12 @@ func startDaemon(cmd *cobra.Command, args []string) {
 	defer pidfile.Remove()
 
 	activeJobs := make(map[string]chan struct{})
+
+	// daemon is the single consumer of config, we implement mutex at the
+	// callee-level
 	var mu sync.Mutex
 
+	// onJobFinish loads config, removes job from config, and saves file
 	onJobFinish := func(jobURL string) {
 		mu.Lock()
 		defer mu.Unlock()
