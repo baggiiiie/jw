@@ -26,7 +26,13 @@ func init() {
 	RootCmd.AddCommand(startDaemonCmd)
 }
 
-func onJobFinish(jobURL string, cfg *config.Config, logger *log.Logger, activeJobs map[string]chan struct{}) {
+func onJobFinish(jobURL string, logger *log.Logger, activeJobs map[string]chan struct{}) {
+	cfg, err := config.Load()
+	if err != nil {
+		logger.Printf("Error loading config to remove finished job: %v", err)
+		return
+	}
+
 	cfg.RemoveJob(jobURL)
 	if err := cfg.Save(); err != nil {
 		logger.Printf("Error saving config after removing finished job: %v", err)
@@ -38,7 +44,7 @@ func onJobFinish(jobURL string, cfg *config.Config, logger *log.Logger, activeJo
 	}
 }
 
-func reloadConfigAndJobs(token string, logger *log.Logger, cfg *config.Config, activeJobs map[string]chan struct{}, onJobFinish func(string)) {
+func reloadConfigAndJobs(token string, logger *log.Logger, activeJobs map[string]chan struct{}, onJobFinish func(string)) {
 	reloadedCfg, err := config.Reload()
 	if err != nil {
 		logger.Printf("Error reloading config: %v", err)
@@ -63,6 +69,7 @@ func reloadConfigAndJobs(token string, logger *log.Logger, cfg *config.Config, a
 			go monitor.MonitorJob(jobURL, token, logger, onJobFinish, stopChan)
 		}
 	}
+
 	logger.Printf("Configuration reloaded. Monitoring %d jobs.", len(activeJobs))
 }
 
@@ -90,17 +97,16 @@ func startDaemon(cmd *cobra.Command, args []string) {
 
 	activeJobs := make(map[string]chan struct{})
 
-	cfg, err := config.Load()
-	if err != nil {
+	if _, err := config.Load(); err != nil {
 		logger.Fatalf("Failed to load config: %v", err)
 	}
 
 	onJobFinishCallback := func(jobURL string) {
-		onJobFinish(jobURL, cfg, logger, activeJobs)
+		onJobFinish(jobURL, logger, activeJobs)
 	}
 
 	reloadConfigAndJobsCallback := func() {
-		reloadConfigAndJobs(token, logger, cfg, activeJobs, onJobFinishCallback)
+		reloadConfigAndJobs(token, logger, activeJobs, onJobFinishCallback)
 	}
 
 	sigChan := make(chan os.Signal, 1)
@@ -131,7 +137,7 @@ func startDaemon(cmd *cobra.Command, args []string) {
 				logger.Printf("Failed to verify/restore PID file: %v", err)
 			}
 
-			if cfg.JobCount() == 0 {
+			if len(activeJobs) == 0 {
 				logger.Println("No more jobs to monitor. Shutting down daemon.")
 				return
 			}

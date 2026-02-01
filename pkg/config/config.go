@@ -162,13 +162,6 @@ func (c *Config) GetJobs() map[string]Job {
 	return jobs
 }
 
-func (c *Config) JobCount() int {
-	mu.RLock()
-	defer mu.RUnlock()
-
-	return len(c.Jobs)
-}
-
 // UpdateJobCheckStatus updates the check status for a job.
 // Returns true if the status changed, false otherwise.
 func (c *Config) UpdateJobCheckStatus(jobURL string, failed bool) bool {
