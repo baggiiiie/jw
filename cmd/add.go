@@ -2,11 +2,11 @@ package cmd
 
 import (
 	"fmt"
-	"jenkins-monitor/pkg/color"
-	"jenkins-monitor/pkg/config"
-	"log"
 	"os"
 	"strings"
+
+	"jenkins-monitor/pkg/color"
+	"jenkins-monitor/pkg/config"
 
 	"github.com/spf13/cobra"
 )
@@ -49,8 +49,9 @@ var addCmd = &cobra.Command{
 
 		fmt.Println(color.GreenText("Added job to config: " + jobURL))
 
-		signalDaemonReload()
-		log.Println("Daemon signaled to monitor the new job.")
+		if signalDaemonReload() {
+			fmt.Println("Daemon signaled to monitor the new job.")
+		}
 	},
 }
 

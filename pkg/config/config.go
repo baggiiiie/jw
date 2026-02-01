@@ -7,12 +7,14 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"syscall"
 	"time"
 )
 
 const (
 	configDirName  = ".jw"
 	configFileName = "monitored_jobs.json"
+	lockFileName   = "config.lock"
 )
 
 type Job struct {
@@ -37,13 +39,53 @@ var (
 	mu       sync.RWMutex
 )
 
-func GetConfigPath() (string, error) {
+func getConfigDir() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
-	configDir := filepath.Join(home, configDirName)
+	return filepath.Join(home, configDirName), nil
+}
+
+func GetConfigPath() (string, error) {
+	configDir, err := getConfigDir()
+	if err != nil {
+		return "", err
+	}
 	return filepath.Join(configDir, configFileName), nil
+}
+
+func getLockPath() (string, error) {
+	configDir, err := getConfigDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(configDir, lockFileName), nil
+}
+
+func withFileLock(fn func() error) error {
+	lockPath, err := getLockPath()
+	if err != nil {
+		return err
+	}
+
+	configDir := filepath.Dir(lockPath)
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		return err
+	}
+
+	lockFile, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o644)
+	if err != nil {
+		return err
+	}
+	defer lockFile.Close()
+
+	if err := syscall.Flock(int(lockFile.Fd()), syscall.LOCK_EX); err != nil {
+		return err
+	}
+	defer syscall.Flock(int(lockFile.Fd()), syscall.LOCK_UN)
+
+	return fn()
 }
 
 // loadFromDisk reads the config file from disk.
@@ -93,7 +135,12 @@ func Reload() (*Config, error) {
 	mu.Lock()
 	defer mu.Unlock()
 
-	cfg, err := loadFromDisk()
+	var cfg *Config
+	err := withFileLock(func() error {
+		var loadErr error
+		cfg, loadErr = loadFromDisk()
+		return loadErr
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -105,23 +152,24 @@ func (c *Config) Save() error {
 	mu.Lock()
 	defer mu.Unlock()
 
-	path, err := GetConfigPath()
-	if err != nil {
-		return err
-	}
+	return withFileLock(func() error {
+		path, err := GetConfigPath()
+		if err != nil {
+			return err
+		}
 
-	// Ensure config directory exists
-	configDir := filepath.Dir(path)
-	if err := os.MkdirAll(configDir, 0o755); err != nil {
-		return err
-	}
+		configDir := filepath.Dir(path)
+		if err := os.MkdirAll(configDir, 0o755); err != nil {
+			return err
+		}
 
-	data, err := json.MarshalIndent(c, "", "  ")
-	if err != nil {
-		return err
-	}
+		data, err := json.MarshalIndent(c, "", "  ")
+		if err != nil {
+			return err
+		}
 
-	return os.WriteFile(path, data, 0o644)
+		return os.WriteFile(path, data, 0o644)
+	})
 }
 
 func (c *Config) AddJob(jobURL string) {
