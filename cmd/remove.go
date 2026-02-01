@@ -1,10 +1,12 @@
+// Package cmd implements the command-line interface for jw
 package cmd
 
 import (
 	"fmt"
+	"os"
+
 	"jenkins-monitor/pkg/color"
 	"jenkins-monitor/pkg/config"
-	"os"
 
 	"github.com/spf13/cobra"
 )

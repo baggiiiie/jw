@@ -46,24 +46,40 @@ func TestUpdateJobCheckStatus(t *testing.T) {
 
 	c.AddJob(url)
 
-	// Update to failed
-	c.UpdateJobCheckStatus(url, true)
+	// Update to failed - should return true (changed)
+	if changed := c.UpdateJobCheckStatus(url, true); !changed {
+		t.Error("expected UpdateJobCheckStatus to return true when status changes")
+	}
 	if !c.Jobs[url].LastCheckFailed {
 		t.Error("expected LastCheckFailed to be true")
 	}
 
-	// Update to success
-	c.UpdateJobCheckStatus(url, false)
+	// Update to failed again - should return false (no change)
+	if changed := c.UpdateJobCheckStatus(url, true); changed {
+		t.Error("expected UpdateJobCheckStatus to return false when status unchanged")
+	}
+
+	// Update to success - should return true (changed)
+	if changed := c.UpdateJobCheckStatus(url, false); !changed {
+		t.Error("expected UpdateJobCheckStatus to return true when status changes")
+	}
 	if c.Jobs[url].LastCheckFailed {
 		t.Error("expected LastCheckFailed to be false")
+	}
+
+	// Update to success again - should return false (no change)
+	if changed := c.UpdateJobCheckStatus(url, false); changed {
+		t.Error("expected UpdateJobCheckStatus to return false when status unchanged")
 	}
 }
 
 func TestUpdateJobCheckStatus_NonExistentJob(t *testing.T) {
 	c := &Config{Jobs: make(map[string]Job)}
 
-	// Should not panic on non-existent job
-	c.UpdateJobCheckStatus("http://jenkins/job/nonexistent", true)
+	// Should not panic on non-existent job and return false
+	if changed := c.UpdateJobCheckStatus("http://jenkins/job/nonexistent", true); changed {
+		t.Error("expected UpdateJobCheckStatus to return false for non-existent job")
+	}
 
 	if len(c.Jobs) != 0 {
 		t.Error("should not create job when updating non-existent")

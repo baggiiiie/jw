@@ -158,12 +158,19 @@ func (c *Config) JobCount() int {
 	return len(c.Jobs)
 }
 
-func (c *Config) UpdateJobCheckStatus(jobURL string, failed bool) {
+// UpdateJobCheckStatus updates the check status for a job.
+// Returns true if the status changed, false otherwise.
+func (c *Config) UpdateJobCheckStatus(jobURL string, failed bool) bool {
 	mu.Lock()
 	defer mu.Unlock()
 
 	if job, exists := c.Jobs[jobURL]; exists {
+		if job.LastCheckFailed == failed {
+			return false
+		}
 		job.LastCheckFailed = failed
 		c.Jobs[jobURL] = job
+		return true
 	}
+	return false
 }
