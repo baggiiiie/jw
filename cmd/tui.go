@@ -2,10 +2,12 @@ package cmd
 
 import (
 	"fmt"
-	"jenkins-monitor/pkg/config"
 	"log"
 	"strings"
 	"time"
+
+	"jenkins-monitor/pkg/color"
+	"jenkins-monitor/pkg/config"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -30,7 +32,9 @@ func runTUI() {
 	// updateTableContent refreshes the table view with the latest job statuses.
 	// It will stop the application if the job list becomes empty.
 	updateTableContent := func() {
-		cfg, err := config.Load()
+		// Use Reload() instead of Load() to get fresh data from disk,
+		// since the daemon (a separate process) may have modified the config.
+		cfg, err := config.Reload()
 		if err != nil {
 			log.Printf("Error loading config: %v", err)
 			return
@@ -101,5 +105,6 @@ func runTUI() {
 	}
 
 	// Signal the ticker to stop.
+	fmt.Println(color.GreenText("All watched jobs finished! TUI exited."))
 	close(done)
 }
