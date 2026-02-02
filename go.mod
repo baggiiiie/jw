@@ -6,6 +6,8 @@ require (
 	github.com/gdamore/tcell/v2 v2.13.7
 	github.com/rivo/tview v0.42.0
 	github.com/spf13/cobra v1.10.2
+	github.com/stretchr/testify v1.11.1
+	golang.org/x/mod v0.29.0
 )
 
 require (
@@ -16,7 +18,6 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
-	github.com/stretchr/testify v1.11.1 // indirect
 	golang.org/x/sys v0.38.0 // indirect
 	golang.org/x/term v0.37.0 // indirect
 	golang.org/x/text v0.31.0 // indirect

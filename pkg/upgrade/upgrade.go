@@ -4,11 +4,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"jenkins-monitor/pkg/color"
 	"jenkins-monitor/pkg/config"
 	"jenkins-monitor/pkg/version"
+
+	"golang.org/x/mod/semver"
 )
 
 type releaseResponse struct {
@@ -17,26 +20,27 @@ type releaseResponse struct {
 
 func RunCheck(cfg *config.Config) {
 	current := version.GetVersion()
+	fmt.Println("Current version:", current)
 	// Skip check for dev builds
 	if current == "dev" {
 		return
 	}
-
-	shouldCheck := time.Since(cfg.UpgradeState.LastChecked) > 24*time.Hour
-	latest := cfg.UpgradeState.LatestVersion
-
-	if shouldCheck {
-		newLatest, err := fetchLatestVersion()
-		if err == nil {
-			latest = newLatest
-			cfg.UpgradeState.LatestVersion = latest
-			cfg.UpgradeState.LastChecked = time.Now()
-			// Ignore save error, not critical
-			_ = cfg.Save()
-		}
+	if strings.Contains(current, "-") {
+		current = strings.SplitN(current, "-", 2)[0]
 	}
 
-	if latest != "" && latest != current {
+	latest := cfg.UpgradeState.LatestVersion
+
+	newLatest, err := fetchLatestVersion()
+	if err == nil {
+		latest = newLatest
+		cfg.UpgradeState.LatestVersion = latest
+		cfg.UpgradeState.LastChecked = time.Now()
+		// Ignore save error, not critical
+		_ = cfg.Save()
+	}
+
+	if latest != "" && semver.Compare(current, latest) < 0 {
 		promptUpgrade(current, latest)
 	}
 }
