@@ -28,10 +28,17 @@ go build -o jw .
 
 ## Usage
 
-Set your Jenkins API token:
+Set your Jenkins credentials (same format as `curl -u user:token`):
 
 ```bash
-export JENKINS_TOKEN=your_token
+export JENKINS_USER=your_username
+export JENKINS_API_TOKEN=your_api_token
+```
+
+Or use the legacy pre-encoded token:
+
+```bash
+export JENKINS_TOKEN=base64_encoded_credentials
 ```
 
 Add a job to monitor:

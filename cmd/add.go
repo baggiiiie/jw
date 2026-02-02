@@ -16,8 +16,10 @@ var addCmd = &cobra.Command{
 	Short: "Add a Jenkins job to monitor",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		if os.Getenv("JENKINS_TOKEN") == "" {
-			fmt.Println(color.RedText("Error: JENKINS_TOKEN environment variable is not set"))
+		hasUserCreds := os.Getenv("JENKINS_USER") != "" && os.Getenv("JENKINS_API_TOKEN") != ""
+		hasLegacyToken := os.Getenv("JENKINS_TOKEN") != ""
+		if !hasUserCreds && !hasLegacyToken {
+			fmt.Println(color.RedText("Error: Jenkins credentials not set. Set JENKINS_USER and JENKINS_API_TOKEN, or JENKINS_TOKEN"))
 			os.Exit(1)
 		}
 
