@@ -14,7 +14,7 @@ func GetPidFilePath() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".jenkins_monitor.pid"), nil
+	return filepath.Join(home, ".jw", ".jenkins_monitor.pid"), nil
 }
 
 func IsDaemonRunning() (int, bool) {
@@ -57,6 +57,10 @@ func IsDaemonRunning() (int, bool) {
 func Write() error {
 	path, err := GetPidFilePath()
 	if err != nil {
+		return err
+	}
+
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
 

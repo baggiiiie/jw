@@ -11,12 +11,16 @@ func GetLogFilePath() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".jenkins_monitor.log"), nil
+	return filepath.Join(home, ".jw", ".jenkins_monitor.log"), nil
 }
 
 func SetupLogger() (*log.Logger, error) {
 	path, err := GetLogFilePath()
 	if err != nil {
+		return nil, err
+	}
+
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return nil, err
 	}
 
