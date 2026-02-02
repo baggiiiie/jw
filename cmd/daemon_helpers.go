@@ -13,19 +13,18 @@ import (
 )
 
 func signalDaemonReload() bool {
-	if pid, running := pidfile.IsDaemonRunning(); running {
-		if process, err := os.FindProcess(pid); err == nil {
-			log.Println("Signaling daemon to reload config...")
-			process.Signal(syscall.SIGHUP)
-			return true
-		}
+	pid := ensureDaemonRunning()
+	if process, err := os.FindProcess(pid); err == nil {
+		log.Println("Signaling daemon to reload config...")
+		process.Signal(syscall.SIGHUP)
+		return true
 	}
 	return false
 }
 
-func ensureDaemonRunning() {
-	if _, running := pidfile.IsDaemonRunning(); running {
-		return
+func ensureDaemonRunning() int {
+	if pid, running := pidfile.IsDaemonRunning(); running {
+		return pid
 	}
 
 	// Double-check: Is the daemon actually running but the PID file is missing?
@@ -36,9 +35,9 @@ func ensureDaemonRunning() {
 		// Wait up to 6 seconds for the daemon's self-healing loop (5s interval) to restore the file
 		for range 7 {
 			time.Sleep(1 * time.Second)
-			if _, running := pidfile.IsDaemonRunning(); running {
+			if pid, running := pidfile.IsDaemonRunning(); running {
 				fmt.Println(color.GreenText("Daemon PID file restored."))
-				return
+				return pid
 			}
 		}
 
@@ -64,9 +63,11 @@ func ensureDaemonRunning() {
 	// Give it a moment to start and write its PID file
 	time.Sleep(1 * time.Second)
 
-	if _, running := pidfile.IsDaemonRunning(); running {
-		fmt.Println(color.GreenText("Daemon started successfully."))
-	} else {
+	pid, running := pidfile.IsDaemonRunning()
+	if !running {
 		fmt.Println(color.RedText("Failed to start daemon. Check logs for details."))
+		os.Exit(1)
 	}
+	fmt.Println(color.GreenText("Daemon started successfully."))
+	return pid
 }

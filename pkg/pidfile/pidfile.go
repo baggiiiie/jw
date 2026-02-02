@@ -61,7 +61,7 @@ func Write() error {
 	}
 
 	pid := os.Getpid()
-	return os.WriteFile(path, []byte(strconv.Itoa(pid)), 0644)
+	return os.WriteFile(path, []byte(strconv.Itoa(pid)), 0o644)
 }
 
 func Remove() error {
@@ -110,8 +110,8 @@ func FindDaemonProcess() (int, bool) {
 		return 0, false
 	}
 
-	pids := strings.Split(strings.TrimSpace(string(out)), "\n")
-	for _, pidStr := range pids {
+	pids := strings.SplitSeq(strings.TrimSpace(string(out)), "\n")
+	for pidStr := range pids {
 		pid, err := strconv.Atoi(pidStr)
 		if err == nil {
 			// Ensure we don't accidentally match ourselves if we were somehow

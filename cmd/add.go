@@ -27,8 +27,6 @@ var addCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		ensureDaemonRunning()
-
 		cfg, err := config.Load()
 		if err != nil {
 			fmt.Println(color.RedText(fmt.Sprintf("Error loading config: %v", err)))
