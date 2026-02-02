@@ -106,7 +106,15 @@ func isFinalStatus(result string) bool {
 // updateJobCheckStatusInConfig updates the check status for a job atomically.
 func updateJobCheckStatusInConfig(jobURL string, failed bool, logger *log.Logger) {
 	err := config.Update(func(cfg *config.Config) error {
-		cfg.UpdateJobCheckStatus(jobURL, failed)
+		// Directly modify the job in the config.
+		// Do NOT call cfg.UpdateJobCheckStatus() here - it would deadlock
+		// because config.Update already holds the mutex.
+		if job, exists := cfg.Jobs[jobURL]; exists {
+			if job.LastCheckFailed != failed {
+				job.LastCheckFailed = failed
+				cfg.Jobs[jobURL] = job
+			}
+		}
 		return nil
 	})
 	if err != nil {

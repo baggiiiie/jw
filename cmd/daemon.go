@@ -50,7 +50,9 @@ func getJenkinsToken() (string, error) {
 
 func handleJobFinish(jobURL string, logger *log.Logger, activeJobs map[string]chan struct{}) {
 	err := config.Update(func(cfg *config.Config) error {
-		cfg.RemoveJob(jobURL)
+		// Directly delete from the map instead of calling cfg.RemoveJob()
+		// to avoid deadlock since config.Update already holds the mutex.
+		delete(cfg.Jobs, jobURL)
 		return nil
 	})
 	if err != nil {
