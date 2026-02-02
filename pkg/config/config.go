@@ -172,6 +172,42 @@ func (c *Config) Save() error {
 	})
 }
 
+// Update performs an atomic read-modify-write operation on the config.
+// It loads the latest config from disk, applies the modification function,
+// and saves it back—all under the file lock to prevent lost updates.
+func Update(fn func(*Config) error) error {
+	mu.Lock()
+	defer mu.Unlock()
+
+	return withFileLock(func() error {
+		cfg, err := loadFromDisk()
+		if err != nil {
+			return err
+		}
+
+		if err := fn(cfg); err != nil {
+			return err
+		}
+
+		path, err := GetConfigPath()
+		if err != nil {
+			return err
+		}
+
+		data, err := json.MarshalIndent(cfg, "", "  ")
+		if err != nil {
+			return err
+		}
+
+		if err := os.WriteFile(path, data, 0o644); err != nil {
+			return err
+		}
+
+		instance = cfg
+		return nil
+	})
+}
+
 func (c *Config) AddJob(jobURL string) {
 	mu.Lock()
 	defer mu.Unlock()

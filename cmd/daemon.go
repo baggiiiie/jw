@@ -26,16 +26,13 @@ func init() {
 	RootCmd.AddCommand(startDaemonCmd)
 }
 
-func onJobFinish(jobURL string, logger *log.Logger, activeJobs map[string]chan struct{}) {
-	cfg, err := config.Load()
+func handleJobFinish(jobURL string, logger *log.Logger, activeJobs map[string]chan struct{}) {
+	err := config.Update(func(cfg *config.Config) error {
+		cfg.RemoveJob(jobURL)
+		return nil
+	})
 	if err != nil {
-		logger.Printf("Error loading config to remove finished job: %v", err)
-		return
-	}
-
-	cfg.RemoveJob(jobURL)
-	if err := cfg.Save(); err != nil {
-		logger.Printf("Error saving config after removing finished job: %v", err)
+		logger.Printf("Error removing finished job from config: %v", err)
 	}
 
 	if stopChan, exists := activeJobs[jobURL]; exists {
@@ -44,7 +41,7 @@ func onJobFinish(jobURL string, logger *log.Logger, activeJobs map[string]chan s
 	}
 }
 
-func reloadConfigAndJobs(token string, logger *log.Logger, activeJobs map[string]chan struct{}, onJobFinish func(string)) {
+func reloadConfigAndJobs(token string, logger *log.Logger, activeJobs map[string]chan struct{}, jobFinishedChan chan<- string) {
 	reloadedCfg, err := config.Reload()
 	if err != nil {
 		logger.Printf("Error reloading config: %v", err)
@@ -66,7 +63,9 @@ func reloadConfigAndJobs(token string, logger *log.Logger, activeJobs map[string
 			logger.Printf("Starting to monitor new job: %s", jobURL)
 			stopChan := make(chan struct{})
 			activeJobs[jobURL] = stopChan
-			go monitor.MonitorJob(jobURL, token, logger, onJobFinish, stopChan)
+			go monitor.MonitorJob(jobURL, token, logger, func(finishedURL string) {
+				jobFinishedChan <- finishedURL
+			}, stopChan)
 		}
 	}
 
@@ -96,23 +95,23 @@ func startDaemon(cmd *cobra.Command, args []string) {
 	defer pidfile.Remove()
 
 	activeJobs := make(map[string]chan struct{})
+	jobFinishedChan := make(chan string, 10)
 
 	if _, err := config.Load(); err != nil {
 		logger.Fatalf("Failed to load config: %v", err)
 	}
 
-	onJobFinishCallback := func(jobURL string) {
-		onJobFinish(jobURL, logger, activeJobs)
-	}
-
 	reloadConfigAndJobsCallback := func() {
-		reloadConfigAndJobs(token, logger, activeJobs, onJobFinishCallback)
+		reloadConfigAndJobs(token, logger, activeJobs, jobFinishedChan)
 	}
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
 
 	reloadConfigAndJobsCallback()
+
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
 
 	for {
 		select {
@@ -131,8 +130,9 @@ func startDaemon(cmd *cobra.Command, args []string) {
 				logger.Println("Daemon stopped.")
 				return
 			}
-		case <-time.After(5 * time.Second):
-			// Periodically ensure PID file exists (self-healing)
+		case jobURL := <-jobFinishedChan:
+			handleJobFinish(jobURL, logger, activeJobs)
+		case <-ticker.C:
 			if err := pidfile.CheckAndRestore(); err != nil {
 				logger.Printf("Failed to verify/restore PID file: %v", err)
 			}
