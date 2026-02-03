@@ -16,7 +16,8 @@ var removeCmd = &cobra.Command{
 	Short: "Remove a Jenkins job from monitoring",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		cfg, err := config.Load()
+		store := config.NewDiskStore()
+		cfg, err := store.Load()
 		if err != nil {
 			fmt.Println(color.RedText(fmt.Sprintf("Error loading config: %v", err)))
 			os.Exit(1)
@@ -30,7 +31,7 @@ var removeCmd = &cobra.Command{
 
 		cfg.RemoveJob(jobURL)
 
-		if err := cfg.Save(); err != nil {
+		if err := store.Save(cfg); err != nil {
 			fmt.Println(color.RedText(fmt.Sprintf("Error saving config: %v", err)))
 			os.Exit(1)
 		}

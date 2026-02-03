@@ -15,7 +15,8 @@ import (
 
 func runTUI() {
 	// Initial check to prevent TUI from starting if there are no jobs.
-	initialCfg, err := config.Load()
+	store := config.NewDiskStore()
+	initialCfg, err := store.Load()
 	if err != nil {
 		fmt.Printf("Error loading config: %v\n", err)
 		return
@@ -32,9 +33,7 @@ func runTUI() {
 	// updateTableContent refreshes the table view with the latest job statuses.
 	// It will stop the application if the job list becomes empty.
 	updateTableContent := func() {
-		// Use Reload() instead of Load() to get fresh data from disk,
-		// since the daemon (a separate process) may have modified the config.
-		cfg, err := config.Reload()
+		cfg, err := store.Load()
 		if err != nil {
 			log.Printf("Error loading config: %v", err)
 			return

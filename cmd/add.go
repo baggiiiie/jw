@@ -29,7 +29,8 @@ var addCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		cfg, err := config.Load()
+		store := config.NewDiskStore()
+		cfg, err := store.Load()
 		if err != nil {
 			fmt.Println(color.RedText(fmt.Sprintf("Error loading config: %v", err)))
 			os.Exit(1)
@@ -42,7 +43,7 @@ var addCmd = &cobra.Command{
 
 		cfg.AddJob(jobURL)
 
-		if err := cfg.Save(); err != nil {
+		if err := store.Save(cfg); err != nil {
 			fmt.Println(color.RedText(fmt.Sprintf("Error saving config: %v", err)))
 			os.Exit(1)
 		}

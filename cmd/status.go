@@ -30,7 +30,8 @@ var statusCmd = &cobra.Command{
 			return
 		}
 
-		cfg, err := config.Load()
+		store := config.NewDiskStore()
+		cfg, err := store.Load()
 		if err != nil {
 			fmt.Println(color.RedText(fmt.Sprintf("Error loading config: %v", err)))
 			os.Exit(1)

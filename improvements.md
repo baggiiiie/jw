@@ -22,6 +22,8 @@ Pass `ConfigStore` to daemon/commands rather than using global `config.Load()`.
 
 **Verdict:** ✅ VALID. The global `mu` mutex is used by both package-level `Update()` and method `cfg.Save()`. The `sync.Once` singleton makes testing difficult. The deadlock warning in `monitor.go` (line 110-111) proves this is a real problem—callers must bypass `cfg.UpdateJobCheckStatus()` inside `config.Update()`. DI would eliminate this footgun.
 
+**Implementation notes (2026-02-04):** Replaced the singleton with an injectable `ConfigStore` and a `DiskStore` implementation. CLI commands, daemon, monitor, and upgrade now create a store instance and pass it through, removing `Load/Reload/Update/Save` globals and the shared mutex. Tests now assert that `Load()` returns fresh data from disk instead of cached instances. This removes the deadlock footgun in `monitor.go` and aligns config access with dependency injection.
+
 ---
 
 ## 2. Mixed Responsibilities in monitor.go

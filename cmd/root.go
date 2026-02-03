@@ -14,10 +14,11 @@ var RootCmd = &cobra.Command{
 	Short: "A Go-based Jenkins job monitor daemon",
 	Long:  `A daemon that monitors Jenkins jobs in the background and sends macOS notifications upon completion.`,
 	PersistentPostRun: func(cmd *cobra.Command, args []string) {
-		cfg, err := config.Load()
+		store := config.NewDiskStore()
+		cfg, err := store.Load()
 		shouldCheck := time.Since(cfg.UpgradeState.LastChecked) > 24*time.Hour
 		if err == nil && shouldCheck {
-			upgrade.RunCheck(cfg)
+			upgrade.RunCheck(store, cfg)
 		}
 	},
 }

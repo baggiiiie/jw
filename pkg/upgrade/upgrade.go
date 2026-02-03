@@ -18,7 +18,7 @@ type releaseResponse struct {
 	TagName string `json:"tag_name"`
 }
 
-func RunCheck(cfg *config.Config) {
+func RunCheck(store config.ConfigStore, cfg *config.Config) {
 	current := version.GetVersion()
 	fmt.Println("Current version:", current)
 	// Skip check for dev builds
@@ -37,7 +37,7 @@ func RunCheck(cfg *config.Config) {
 		cfg.UpgradeState.LatestVersion = latest
 		cfg.UpgradeState.LastChecked = time.Now()
 		// Ignore save error, not critical
-		_ = cfg.Save()
+		_ = store.Save(cfg)
 	}
 
 	if latest != "" && semver.Compare(current, latest) < 0 {

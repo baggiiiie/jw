@@ -1,7 +1,6 @@
 package config
 
 import (
-	"sync"
 	"testing"
 	"time"
 
@@ -67,20 +66,19 @@ func TestUpdate_NoDeadlockWithDirectModification(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
 
-	once = sync.Once{}
-	instance = nil
+	store := NewDiskStore()
 
-	cfg, err := Load()
+	cfg, err := store.Load()
 	assert.NoError(t, err, "failed to load config: %v", err)
 
 	url := "http://jenkins/job/test"
 	cfg.AddJob(url)
-	err = cfg.Save()
+	err = store.Save(cfg)
 	assert.NoError(t, err, "failed to save config: %v", err)
 
 	done := make(chan struct{})
 	go func() {
-		err := Update(func(c *Config) error {
+		err := store.Update(func(c *Config) error {
 			if job, exists := c.Jobs[url]; exists {
 				job.LastCheckFailed = true
 				c.Jobs[url] = job
@@ -97,7 +95,7 @@ func TestUpdate_NoDeadlockWithDirectModification(t *testing.T) {
 		t.Fatal("Update deadlocked - took longer than 2 seconds")
 	}
 
-	reloaded, err := Reload()
+	reloaded, err := store.Load()
 	assert.NoError(t, err, "failed to reload config: %v", err)
 	assert.True(t, reloaded.Jobs[url].LastCheckFailed, "expected LastCheckFailed to be true after Update")
 }
@@ -106,20 +104,19 @@ func TestUpdate_RemoveJobDirectDeletion(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
 
-	once = sync.Once{}
-	instance = nil
+	store := NewDiskStore()
 
-	cfg, err := Load()
+	cfg, err := store.Load()
 	assert.NoError(t, err, "failed to load config: %v", err)
 
 	url := "http://jenkins/job/test"
 	cfg.AddJob(url)
-	err = cfg.Save()
+	err = store.Save(cfg)
 	assert.NoError(t, err, "failed to save config: %v", err)
 
 	done := make(chan struct{})
 	go func() {
-		err := Update(func(c *Config) error {
+		err := store.Update(func(c *Config) error {
 			delete(c.Jobs, url)
 			return nil
 		})
@@ -133,7 +130,7 @@ func TestUpdate_RemoveJobDirectDeletion(t *testing.T) {
 		t.Fatal("Update deadlocked - took longer than 2 seconds")
 	}
 
-	reloaded, err := Reload()
+	reloaded, err := store.Load()
 	assert.NoError(t, err, "failed to reload config: %v", err)
 	assert.False(t, reloaded.HasJob(url), "expected job to be removed after Update")
 }
@@ -142,32 +139,27 @@ func TestLoad_ReturnsCachedInstance(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
 
-	once = sync.Once{}
-	instance = nil
+	store := NewDiskStore()
 
-	cfg, err := Load()
+	cfg, err := store.Load()
 	assert.NoError(t, err, "failed to load config: %v", err)
 
 	url := "http://jenkins/job/test"
 	cfg.AddJob(url)
-	err = cfg.Save()
+	err = store.Save(cfg)
 	assert.NoError(t, err, "failed to save config: %v", err)
 
-	cfg2, err := Load()
+	cfg2, err := store.Load()
 	assert.NoError(t, err, "failed to load config: %v", err)
-	assert.Equal(t, cfg, cfg2, "Load() should return the same cached instance")
+	assert.NotSame(t, cfg, cfg2, "Load() should return a fresh instance")
 
 	diskCfg, err := loadFromDisk()
 	assert.NoError(t, err, "failed to load from disk: %v", err)
 	delete(diskCfg.Jobs, url)
-	err = diskCfg.Save()
+	err = store.Save(diskCfg)
 	assert.NoError(t, err, "failed to save config: %v", err)
 
-	cachedCfg, err := Load()
+	cachedCfg, err := store.Load()
 	assert.NoError(t, err, "failed to load config: %v", err)
-	assert.True(t, cachedCfg.HasJob(url), "Load() should return cached instance, not re-read from disk")
-
-	reloadedCfg, err := Reload()
-	assert.NoError(t, err, "failed to reload config: %v", err)
-	assert.False(t, reloadedCfg.HasJob(url), "Reload() should read fresh data from disk and see job was removed")
+	assert.False(t, cachedCfg.HasJob(url), "Load() should return a fresh instance reflecting disk")
 }

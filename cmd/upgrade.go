@@ -12,11 +12,12 @@ var upgradeCmd = &cobra.Command{
 	Short:  "check upgrade",
 	Hidden: true,
 	Run: func(cmd *cobra.Command, args []string) {
-		cfg, err := config.Load()
+		store := config.NewDiskStore()
+		cfg, err := store.Load()
 		if err != nil {
 			panic(err)
 		}
-		upgrade.RunCheck(cfg)
+		upgrade.RunCheck(store, cfg)
 	},
 }
 

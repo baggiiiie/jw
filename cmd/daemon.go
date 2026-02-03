@@ -48,10 +48,9 @@ func getJenkinsToken() (string, error) {
 	return "", nil
 }
 
-func handleJobFinish(jobURL string, logger *log.Logger, activeJobs map[string]chan struct{}) {
-	err := config.Update(func(cfg *config.Config) error {
+func handleJobFinish(jobURL string, logger *log.Logger, store config.ConfigStore, activeJobs map[string]chan struct{}) {
+	err := store.Update(func(cfg *config.Config) error {
 		// Directly delete from the map instead of calling cfg.RemoveJob()
-		// to avoid deadlock since config.Update already holds the mutex.
 		delete(cfg.Jobs, jobURL)
 		return nil
 	})
@@ -65,8 +64,8 @@ func handleJobFinish(jobURL string, logger *log.Logger, activeJobs map[string]ch
 	}
 }
 
-func reloadConfigAndJobs(token string, logger *log.Logger, activeJobs map[string]chan struct{}, jobFinishedChan chan<- string) {
-	reloadedCfg, err := config.Reload()
+func reloadConfigAndJobs(token string, logger *log.Logger, store config.ConfigStore, activeJobs map[string]chan struct{}, jobFinishedChan chan<- string) {
+	reloadedCfg, err := store.Load()
 	if err != nil {
 		logger.Printf("Error reloading config: %v", err)
 		return
@@ -87,7 +86,7 @@ func reloadConfigAndJobs(token string, logger *log.Logger, activeJobs map[string
 			logger.Printf("Starting to monitor new job: %s", jobURL)
 			stopChan := make(chan struct{})
 			activeJobs[jobURL] = stopChan
-			go monitor.MonitorJob(jobURL, token, logger, func(finishedURL string) {
+			go monitor.MonitorJob(jobURL, token, logger, store, func(finishedURL string) {
 				jobFinishedChan <- finishedURL
 			}, stopChan)
 		}
@@ -120,13 +119,14 @@ func startDaemon(cmd *cobra.Command, args []string) {
 
 	activeJobs := make(map[string]chan struct{})
 	jobFinishedChan := make(chan string, 10)
+	store := config.NewDiskStore()
 
-	if _, err := config.Load(); err != nil {
+	if _, err := store.Load(); err != nil {
 		logger.Fatalf("Failed to load config: %v", err)
 	}
 
 	reloadConfigAndJobsCallback := func() {
-		reloadConfigAndJobs(token, logger, activeJobs, jobFinishedChan)
+		reloadConfigAndJobs(token, logger, store, activeJobs, jobFinishedChan)
 	}
 
 	sigChan := make(chan os.Signal, 1)
@@ -155,7 +155,7 @@ func startDaemon(cmd *cobra.Command, args []string) {
 				return
 			}
 		case jobURL := <-jobFinishedChan:
-			handleJobFinish(jobURL, logger, activeJobs)
+			handleJobFinish(jobURL, logger, store, activeJobs)
 		case <-ticker.C:
 			if err := pidfile.CheckAndRestore(); err != nil {
 				logger.Printf("Failed to verify/restore PID file: %v", err)

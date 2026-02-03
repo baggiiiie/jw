@@ -14,7 +14,7 @@ import (
 const pollingInterval = 30 * time.Second
 
 // MonitorJob polls a Jenkins job for its status and sends a notification when it finishes.
-func MonitorJob(jobURL, token string, logger *log.Logger, onFinish func(jobURL string), stop <-chan struct{}) {
+func MonitorJob(jobURL, token string, logger *log.Logger, store config.ConfigStore, onFinish func(jobURL string), stop <-chan struct{}) {
 	jobName := strings.Split(jobURL, "/job/")
 	jobNameSafe := jobName[len(jobName)-1]
 
@@ -25,7 +25,7 @@ func MonitorJob(jobURL, token string, logger *log.Logger, onFinish func(jobURL s
 	defer ticker.Stop()
 
 	// Perform the first check immediately.
-	if checkJobStatus(jobURL, token, jobNameSafe, logger, onFinish) {
+	if checkJobStatus(jobURL, token, jobNameSafe, logger, store, onFinish) {
 		return
 	}
 
@@ -34,7 +34,7 @@ func MonitorJob(jobURL, token string, logger *log.Logger, onFinish func(jobURL s
 		case <-stop:
 			return
 		case <-ticker.C:
-			if checkJobStatus(jobURL, token, jobNameSafe, logger, onFinish) {
+			if checkJobStatus(jobURL, token, jobNameSafe, logger, store, onFinish) {
 				return
 			}
 		}
@@ -42,14 +42,14 @@ func MonitorJob(jobURL, token string, logger *log.Logger, onFinish func(jobURL s
 }
 
 // checkJobStatus checks a Jenkins job's status and returns true if monitoring should stop.
-func checkJobStatus(jobURL, token, jobNameSafe string, logger *log.Logger, onFinish func(jobURL string)) (shouldStop bool) {
+func checkJobStatus(jobURL, token, jobNameSafe string, logger *log.Logger, store config.ConfigStore, onFinish func(jobURL string)) (shouldStop bool) {
 	status, _, err := jenkins.GetJobStatus(jobURL, token)
 	if err != nil {
-		return handleJobStatusError(err, jobURL, jobNameSafe, logger, onFinish)
+		return handleJobStatusError(err, jobURL, jobNameSafe, logger, store, onFinish)
 	}
 
 	logger.Printf("Received status for %s: Building=%v, Result=%s", jobNameSafe, status.Building, status.Result)
-	updateJobCheckStatusInConfig(jobURL, status.Result == "FAILURE", logger)
+	updateJobCheckStatusInConfig(jobURL, status.Result == "FAILURE", logger, store)
 
 	isFinished := !status.Building && isFinalStatus(status.Result)
 	if isFinished {
@@ -61,8 +61,8 @@ func checkJobStatus(jobURL, token, jobNameSafe string, logger *log.Logger, onFin
 }
 
 // handleJobStatusError handles errors from getting job status and returns true if monitoring should stop.
-func handleJobStatusError(err error, jobURL, jobNameSafe string, logger *log.Logger, onFinish func(jobURL string)) (shouldStop bool) {
-	updateJobCheckStatusInConfig(jobURL, true, logger)
+func handleJobStatusError(err error, jobURL, jobNameSafe string, logger *log.Logger, store config.ConfigStore, onFinish func(jobURL string)) (shouldStop bool) {
+	updateJobCheckStatusInConfig(jobURL, true, logger, store)
 
 	if strings.Contains(err.Error(), "404") {
 		logger.Printf("Job '%s' not found (404). Removing.", jobNameSafe)
@@ -104,11 +104,9 @@ func isFinalStatus(result string) bool {
 }
 
 // updateJobCheckStatusInConfig updates the check status for a job atomically.
-func updateJobCheckStatusInConfig(jobURL string, failed bool, logger *log.Logger) {
-	err := config.Update(func(cfg *config.Config) error {
+func updateJobCheckStatusInConfig(jobURL string, failed bool, logger *log.Logger, store config.ConfigStore) {
+	err := store.Update(func(cfg *config.Config) error {
 		// Directly modify the job in the config.
-		// Do NOT call cfg.UpdateJobCheckStatus() here - it would deadlock
-		// because config.Update already holds the mutex.
 		if job, exists := cfg.Jobs[jobURL]; exists {
 			if job.LastCheckFailed != failed {
 				job.LastCheckFailed = failed
