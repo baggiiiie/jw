@@ -7,6 +7,7 @@ import (
 
 	"jenkins-monitor/pkg/color"
 	"jenkins-monitor/pkg/config"
+	"jenkins-monitor/pkg/jenkins"
 
 	"github.com/spf13/cobra"
 )
@@ -16,10 +17,8 @@ var addCmd = &cobra.Command{
 	Short: "Add a Jenkins job to monitor",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		hasUserCreds := os.Getenv("JENKINS_USER") != "" && os.Getenv("JENKINS_API_TOKEN") != ""
-		hasLegacyToken := os.Getenv("JENKINS_TOKEN") != ""
-		if !hasUserCreds && !hasLegacyToken {
-			fmt.Println(color.RedText("Error: Jenkins credentials not set. Set JENKINS_USER and JENKINS_API_TOKEN, or JENKINS_TOKEN"))
+		if _, err := jenkins.GetCredentials(); err != nil {
+			fmt.Println(color.RedText("Error: " + err.Error()))
 			os.Exit(1)
 		}
 
