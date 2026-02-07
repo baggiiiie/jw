@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/base64"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -11,6 +12,7 @@ import (
 	"jenkins-monitor/pkg/config"
 	"jenkins-monitor/pkg/logging"
 	"jenkins-monitor/pkg/monitor"
+	"jenkins-monitor/pkg/notify"
 	"jenkins-monitor/pkg/pidfile"
 
 	"github.com/spf13/cobra"
@@ -48,9 +50,50 @@ func getJenkinsToken() (string, error) {
 	return "", nil
 }
 
-func handleJobFinish(jobURL string, logger *log.Logger, store config.ConfigStore, activeJobs map[string]chan struct{}) {
+func handleJobEvent(event monitor.JobEvent, logger *log.Logger, store config.ConfigStore, activeJobs map[string]chan struct{}) {
+	switch event.Kind {
+	case monitor.EventStatusChecked, monitor.EventError:
+		updateJobCheckStatus(event.JobURL, event.Failed, logger, store)
+
+	case monitor.EventFinished:
+		notificationTitle := "Jenkins Job Completed"
+		if event.Result == "FAILURE" {
+			notificationTitle = "Jenkins Job Failed"
+		}
+		if err := notify.Send(notificationTitle, fmt.Sprintf("Job: %s\nStatus: %s", event.JobName, event.Result), event.JobURL); err != nil {
+			logger.Printf("Failed to send notification: %v", err)
+		} else {
+			logger.Printf("Sent notification for %s", event.JobURL)
+		}
+		removeJob(event.JobURL, logger, store, activeJobs)
+
+	case monitor.EventNotFound:
+		_ = notify.Send(
+			"Jenkins Job Not Found",
+			fmt.Sprintf("Job: %s\nURL returned 404. Removing from monitor.", event.JobName),
+			event.JobURL,
+		)
+		removeJob(event.JobURL, logger, store, activeJobs)
+	}
+}
+
+func updateJobCheckStatus(jobURL string, failed bool, logger *log.Logger, store config.ConfigStore) {
 	err := store.Update(func(cfg *config.Config) error {
-		// Directly delete from the map instead of calling cfg.RemoveJob()
+		if job, exists := cfg.Jobs[jobURL]; exists {
+			if job.LastCheckFailed != failed {
+				job.LastCheckFailed = failed
+				cfg.Jobs[jobURL] = job
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		logger.Printf("Error updating job check status in config: %v", err)
+	}
+}
+
+func removeJob(jobURL string, logger *log.Logger, store config.ConfigStore, activeJobs map[string]chan struct{}) {
+	err := store.Update(func(cfg *config.Config) error {
 		delete(cfg.Jobs, jobURL)
 		return nil
 	})
@@ -64,7 +107,7 @@ func handleJobFinish(jobURL string, logger *log.Logger, store config.ConfigStore
 	}
 }
 
-func reloadConfigAndJobs(token string, logger *log.Logger, store config.ConfigStore, activeJobs map[string]chan struct{}, jobFinishedChan chan<- string) {
+func reloadConfigAndJobs(token string, logger *log.Logger, store config.ConfigStore, activeJobs map[string]chan struct{}, events chan<- monitor.JobEvent) {
 	reloadedCfg, err := store.Load()
 	if err != nil {
 		logger.Printf("Error reloading config: %v", err)
@@ -86,9 +129,7 @@ func reloadConfigAndJobs(token string, logger *log.Logger, store config.ConfigSt
 			logger.Printf("Starting to monitor new job: %s", jobURL)
 			stopChan := make(chan struct{})
 			activeJobs[jobURL] = stopChan
-			go monitor.MonitorJob(jobURL, token, logger, store, func(finishedURL string) {
-				jobFinishedChan <- finishedURL
-			}, stopChan)
+			go monitor.MonitorJob(jobURL, token, logger, events, stopChan)
 		}
 	}
 
@@ -118,7 +159,7 @@ func startDaemon(cmd *cobra.Command, args []string) {
 	defer pidfile.Remove()
 
 	activeJobs := make(map[string]chan struct{})
-	jobFinishedChan := make(chan string, 10)
+	events := make(chan monitor.JobEvent, 10)
 	store := config.NewDiskStore()
 
 	if _, err := store.Load(); err != nil {
@@ -126,7 +167,7 @@ func startDaemon(cmd *cobra.Command, args []string) {
 	}
 
 	reloadConfigAndJobsCallback := func() {
-		reloadConfigAndJobs(token, logger, store, activeJobs, jobFinishedChan)
+		reloadConfigAndJobs(token, logger, store, activeJobs, events)
 	}
 
 	sigChan := make(chan os.Signal, 1)
@@ -154,8 +195,8 @@ func startDaemon(cmd *cobra.Command, args []string) {
 				logger.Println("Daemon stopped.")
 				return
 			}
-		case jobURL := <-jobFinishedChan:
-			handleJobFinish(jobURL, logger, store, activeJobs)
+		case event := <-events:
+			handleJobEvent(event, logger, store, activeJobs)
 		case <-ticker.C:
 			if err := pidfile.CheckAndRestore(); err != nil {
 				logger.Printf("Failed to verify/restore PID file: %v", err)

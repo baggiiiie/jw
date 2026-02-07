@@ -1,20 +1,37 @@
 package monitor
 
 import (
-	"fmt"
 	"log"
 	"strings"
 	"time"
 
-	"jenkins-monitor/pkg/config"
 	"jenkins-monitor/pkg/jenkins"
-	"jenkins-monitor/pkg/notify"
 )
 
 const pollingInterval = 30 * time.Second
 
-// MonitorJob polls a Jenkins job for its status and sends a notification when it finishes.
-func MonitorJob(jobURL, token string, logger *log.Logger, store config.ConfigStore, onFinish func(jobURL string), stop <-chan struct{}) {
+// EventKind describes what happened during a monitoring check.
+type EventKind int
+
+const (
+	EventStatusChecked EventKind = iota // routine status update
+	EventFinished                       // job completed (SUCCESS/FAILURE/ABORTED)
+	EventNotFound                       // job returned 404
+	EventError                          // transient error polling
+)
+
+// JobEvent is emitted by MonitorJob to report status changes.
+type JobEvent struct {
+	JobURL  string
+	JobName string
+	Kind    EventKind
+	Result  string // Jenkins result (SUCCESS, FAILURE, ABORTED) — set on EventFinished
+	Failed  bool   // whether the last check failed (for config tracking)
+	Error   error  // set on EventError/EventNotFound
+}
+
+// MonitorJob polls a Jenkins job for its status and emits events on the provided channel.
+func MonitorJob(jobURL, token string, logger *log.Logger, events chan<- JobEvent, stop <-chan struct{}) {
 	jobName := strings.Split(jobURL, "/job/")
 	jobNameSafe := jobName[len(jobName)-1]
 
@@ -25,7 +42,7 @@ func MonitorJob(jobURL, token string, logger *log.Logger, store config.ConfigSto
 	defer ticker.Stop()
 
 	// Perform the first check immediately.
-	if checkJobStatus(jobURL, token, jobNameSafe, logger, store, onFinish) {
+	if checkJobStatus(jobURL, token, jobNameSafe, logger, events) {
 		return
 	}
 
@@ -34,7 +51,7 @@ func MonitorJob(jobURL, token string, logger *log.Logger, store config.ConfigSto
 		case <-stop:
 			return
 		case <-ticker.C:
-			if checkJobStatus(jobURL, token, jobNameSafe, logger, store, onFinish) {
+			if checkJobStatus(jobURL, token, jobNameSafe, logger, events) {
 				return
 			}
 		}
@@ -42,80 +59,62 @@ func MonitorJob(jobURL, token string, logger *log.Logger, store config.ConfigSto
 }
 
 // checkJobStatus checks a Jenkins job's status and returns true if monitoring should stop.
-func checkJobStatus(jobURL, token, jobNameSafe string, logger *log.Logger, store config.ConfigStore, onFinish func(jobURL string)) (shouldStop bool) {
+func checkJobStatus(jobURL, token, jobNameSafe string, logger *log.Logger, events chan<- JobEvent) (shouldStop bool) {
 	status, _, err := jenkins.GetJobStatus(jobURL, token)
 	if err != nil {
-		return handleJobStatusError(err, jobURL, jobNameSafe, logger, store, onFinish)
+		return handleJobStatusError(err, jobURL, jobNameSafe, logger, events)
 	}
 
 	logger.Printf("Received status for %s: Building=%v, Result=%s", jobNameSafe, status.Building, status.Result)
-	updateJobCheckStatusInConfig(jobURL, status.Result == "FAILURE", logger, store)
 
 	isFinished := !status.Building && isFinalStatus(status.Result)
 	if isFinished {
-		handleFinishedJob(status, jobURL, jobNameSafe, logger, onFinish)
+		logger.Printf("Build finished: %s - Status: %s", jobNameSafe, status.Result)
+		events <- JobEvent{
+			JobURL:  jobURL,
+			JobName: jobNameSafe,
+			Kind:    EventFinished,
+			Result:  status.Result,
+			Failed:  false,
+		}
 		return true
 	}
 
+	events <- JobEvent{
+		JobURL:  jobURL,
+		JobName: jobNameSafe,
+		Kind:    EventStatusChecked,
+		Failed:  status.Result == "FAILURE",
+	}
 	return false
 }
 
 // handleJobStatusError handles errors from getting job status and returns true if monitoring should stop.
-func handleJobStatusError(err error, jobURL, jobNameSafe string, logger *log.Logger, store config.ConfigStore, onFinish func(jobURL string)) (shouldStop bool) {
-	updateJobCheckStatusInConfig(jobURL, true, logger, store)
-
+func handleJobStatusError(err error, jobURL, jobNameSafe string, logger *log.Logger, events chan<- JobEvent) (shouldStop bool) {
 	if strings.Contains(err.Error(), "404") {
 		logger.Printf("Job '%s' not found (404). Removing.", jobNameSafe)
-		_ = notify.Send(
-			"Jenkins Job Not Found",
-			fmt.Sprintf("Job: %s\nURL returned 404. Removing from monitor.", jobNameSafe),
-			jobURL,
-		)
-		onFinish(jobURL)
-		return true // Stop monitoring for 404 errors.
+		events <- JobEvent{
+			JobURL:  jobURL,
+			JobName: jobNameSafe,
+			Kind:    EventNotFound,
+			Failed:  true,
+			Error:   err,
+		}
+		return true
 	}
 
 	logger.Printf("Error getting status for %s: %v. Will retry.", jobNameSafe, err)
-	return false // Continue monitoring for other transient errors.
-}
-
-// handleFinishedJob sends a notification and cleans up a finished job.
-func handleFinishedJob(status *jenkins.JobStatus, jobURL, jobNameSafe string, logger *log.Logger, onFinish func(jobURL string)) {
-	logger.Printf("Build finished: %s - Status: %s", jobNameSafe, status.Result)
-
-	notificationTitle := "Jenkins Job Completed"
-	if status.Result == "FAILURE" {
-		notificationTitle = "Jenkins Job Failed"
+	events <- JobEvent{
+		JobURL:  jobURL,
+		JobName: jobNameSafe,
+		Kind:    EventError,
+		Failed:  true,
+		Error:   err,
 	}
-
-	if err := notify.Send(notificationTitle, fmt.Sprintf("Job: %s\nStatus: %s", jobNameSafe, status.Result), jobURL); err != nil {
-		logger.Printf("Failed to send notification: %v", err)
-	} else {
-		logger.Printf("Sent notification for %s", jobURL)
-	}
-
-	// Always remove finished jobs from monitoring.
-	onFinish(jobURL)
+	return false
 }
 
 // isFinalStatus returns true if the Jenkins build status is a final one.
 func isFinalStatus(result string) bool {
 	return result == "SUCCESS" || result == "FAILURE" || result == "ABORTED"
-}
-
-// updateJobCheckStatusInConfig updates the check status for a job atomically.
-func updateJobCheckStatusInConfig(jobURL string, failed bool, logger *log.Logger, store config.ConfigStore) {
-	err := store.Update(func(cfg *config.Config) error {
-		// Directly modify the job in the config.
-		if job, exists := cfg.Jobs[jobURL]; exists {
-			if job.LastCheckFailed != failed {
-				job.LastCheckFailed = failed
-				cfg.Jobs[jobURL] = job
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		logger.Printf("Error updating job check status in config: %v", err)
-	}
 }
