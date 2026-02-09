@@ -71,8 +71,7 @@ func checkJobStatus(jobURL, token, jobNameSafe string, logger *log.Logger, event
 
 	logger.Printf("Received status for %s: Building=%v, Result=%s", jobNameSafe, status.Building, status.Result)
 
-	isFinished := !status.Building && isFinalStatus(status.Result)
-	if isFinished {
+	if !status.Building {
 		logger.Printf("Build finished: %s - Status: %s", jobNameSafe, status.Result)
 		events <- JobEvent{
 			JobURL:  jobURL,
@@ -118,7 +117,4 @@ func handleJobStatusError(err error, jobURL, jobNameSafe string, logger *log.Log
 	return false
 }
 
-// isFinalStatus returns true if the Jenkins build status is a final one.
-func isFinalStatus(result string) bool {
-	return result == "SUCCESS" || result == "FAILURE" || result == "ABORTED"
-}
+
