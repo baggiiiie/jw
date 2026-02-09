@@ -11,7 +11,7 @@ func GetLogFilePath() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".jw", ".jenkins_monitor.log"), nil
+	return filepath.Join(home, ".jw", "jenkins_monitor.log"), nil
 }
 
 func SetupLogger() (*log.Logger, error) {
@@ -24,7 +24,7 @@ func SetupLogger() (*log.Logger, error) {
 		return nil, err
 	}
 
-	file, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	file, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
 		return nil, err
 	}
