@@ -50,7 +50,7 @@ func getJenkinsToken() (string, error) {
 	return "", nil
 }
 
-func handleJobEvent(event monitor.JobEvent, logger *log.Logger, store config.ConfigStore, activeJobs map[string]chan struct{}) {
+func handleJobEvent(event monitor.JobEvent, logger *log.Logger, store config.ConfigStore, activeJobs map[string]chan struct{}, notifier notify.Notifier) {
 	switch event.Kind {
 	case monitor.EventStatusChecked, monitor.EventError:
 		updateJobCheckStatus(event.JobURL, event.Failed, logger, store)
@@ -60,7 +60,7 @@ func handleJobEvent(event monitor.JobEvent, logger *log.Logger, store config.Con
 		if event.Result == "FAILURE" {
 			notificationTitle = "Jenkins Job Failed"
 		}
-		if err := notify.Send(notificationTitle, fmt.Sprintf("Job: %s\nStatus: %s", event.JobName, event.Result), event.JobURL); err != nil {
+		if err := notifier.Send(notificationTitle, fmt.Sprintf("Job: %s\nStatus: %s", event.JobName, event.Result), event.JobURL); err != nil {
 			logger.Printf("Failed to send notification: %v", err)
 		} else {
 			logger.Printf("Sent notification for %s", event.JobURL)
@@ -68,7 +68,7 @@ func handleJobEvent(event monitor.JobEvent, logger *log.Logger, store config.Con
 		removeJob(event.JobURL, logger, store, activeJobs)
 
 	case monitor.EventNotFound:
-		_ = notify.Send(
+		_ = notifier.Send(
 			"Jenkins Job Not Found",
 			fmt.Sprintf("Job: %s\nURL returned 404. Removing from monitor.", event.JobName),
 			event.JobURL,
@@ -107,8 +107,19 @@ func removeJob(jobURL string, logger *log.Logger, store config.ConfigStore, acti
 	}
 }
 
-func reloadConfigAndJobs(token string, logger *log.Logger, store config.ConfigStore, activeJobs map[string]chan struct{}, events chan<- monitor.JobEvent) {
-	reloadedCfg, err := store.Load()
+type DaemonDeps struct {
+	Store          config.ConfigStore
+	Notifier       notify.Notifier
+	Token          string
+	SigChan        <-chan os.Signal
+	Stop           <-chan struct{}
+	PollInterval   time.Duration
+	TickerInterval time.Duration
+	OnTick         func()
+}
+
+func reloadConfigAndJobs(deps DaemonDeps, logger *log.Logger, activeJobs map[string]chan struct{}, events chan<- monitor.JobEvent) {
+	reloadedCfg, err := deps.Store.Load()
 	if err != nil {
 		logger.Printf("Error reloading config: %v", err)
 		return
@@ -129,11 +140,71 @@ func reloadConfigAndJobs(token string, logger *log.Logger, store config.ConfigSt
 			logger.Printf("Starting to monitor new job: %s", jobURL)
 			stopChan := make(chan struct{})
 			activeJobs[jobURL] = stopChan
-			go monitor.MonitorJob(jobURL, token, logger, events, stopChan)
+			go monitor.MonitorJob(jobURL, deps.Token, logger, events, deps.PollInterval, stopChan)
 		}
 	}
 
 	logger.Printf("Configuration reloaded. Monitoring %d jobs.", len(activeJobs))
+}
+
+func runDaemonLoop(deps DaemonDeps, logger *log.Logger) error {
+	if _, err := deps.Store.Load(); err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
+	activeJobs := make(map[string]chan struct{})
+	events := make(chan monitor.JobEvent, 10)
+
+	reloadConfigAndJobs(deps, logger, activeJobs, events)
+
+	tickerInterval := deps.TickerInterval
+	if tickerInterval <= 0 {
+		tickerInterval = 5 * time.Second
+	}
+	ticker := time.NewTicker(tickerInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-deps.Stop:
+			logger.Println("Stop received, stopping all monitors.")
+			for jobURL, stopChan := range activeJobs {
+				logger.Printf("Stopping monitor for %s", jobURL)
+				close(stopChan)
+			}
+			logger.Println("Daemon stopped.")
+			return nil
+
+		case sig := <-deps.SigChan:
+			switch sig {
+			case syscall.SIGHUP:
+				logger.Println("SIGHUP received, reloading config...")
+				reloadConfigAndJobs(deps, logger, activeJobs, events)
+			case syscall.SIGINT, syscall.SIGTERM:
+				logger.Println("Shutdown signal received, stopping all monitors.")
+				for jobURL, stopChan := range activeJobs {
+					logger.Printf("Stopping monitor for %s", jobURL)
+					close(stopChan)
+				}
+				time.Sleep(1 * time.Second)
+				logger.Println("Daemon stopped.")
+				return nil
+			}
+
+		case event := <-events:
+			handleJobEvent(event, logger, deps.Store, activeJobs, deps.Notifier)
+
+		case <-ticker.C:
+			if deps.OnTick != nil {
+				deps.OnTick()
+			}
+
+			if len(activeJobs) == 0 {
+				logger.Println("No more jobs to monitor. Shutting down daemon.")
+				return nil
+			}
+		}
+	}
 }
 
 func startDaemon(cmd *cobra.Command, args []string) {
@@ -158,54 +229,25 @@ func startDaemon(cmd *cobra.Command, args []string) {
 	}
 	defer pidfile.Remove()
 
-	activeJobs := make(map[string]chan struct{})
-	events := make(chan monitor.JobEvent, 10)
-	store := config.NewDiskStore()
-
-	if _, err := store.Load(); err != nil {
-		logger.Fatalf("Failed to load config: %v", err)
-	}
-
-	reloadConfigAndJobsCallback := func() {
-		reloadConfigAndJobs(token, logger, store, activeJobs, events)
-	}
-
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
 
-	reloadConfigAndJobsCallback()
-
-	ticker := time.NewTicker(5 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case sig := <-sigChan:
-			switch sig {
-			case syscall.SIGHUP:
-				logger.Println("SIGHUP received, reloading config...")
-				reloadConfigAndJobsCallback()
-			case syscall.SIGINT, syscall.SIGTERM:
-				logger.Println("Shutdown signal received, stopping all monitors.")
-				for jobURL, stopChan := range activeJobs {
-					logger.Printf("Stopping monitor for %s", jobURL)
-					close(stopChan)
-				}
-				time.Sleep(1 * time.Second)
-				logger.Println("Daemon stopped.")
-				return
-			}
-		case event := <-events:
-			handleJobEvent(event, logger, store, activeJobs)
-		case <-ticker.C:
+	deps := DaemonDeps{
+		Store:          config.NewDiskStore(),
+		Notifier:       &notify.MacNotifier{},
+		Token:          token,
+		SigChan:        sigChan,
+		Stop:           make(chan struct{}),
+		PollInterval:   0,
+		TickerInterval: 5 * time.Second,
+		OnTick: func() {
 			if err := pidfile.CheckAndRestore(); err != nil {
 				logger.Printf("Failed to verify/restore PID file: %v", err)
 			}
+		},
+	}
 
-			if len(activeJobs) == 0 {
-				logger.Println("No more jobs to monitor. Shutting down daemon.")
-				return
-			}
-		}
+	if err := runDaemonLoop(deps, logger); err != nil {
+		logger.Fatalf("Daemon loop failed: %v", err)
 	}
 }
