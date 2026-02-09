@@ -4,22 +4,33 @@ import (
 	"fmt"
 	"log"
 	"os/exec"
+	"sync"
 )
 
-var notifierExists = checkNotifier()
-
-func checkNotifier() bool {
-	if _, err := exec.LookPath("terminal-notifier"); err != nil {
-		_ = exec.Command("osascript", "-e", `display notification "install with homebrew
-			for better experience" with title "terminal-notifier not found"`).Run()
-		return false
-	}
-	return true
+type Notifier interface {
+	Send(title, message, url string) error
 }
 
-func Send(title, message, url string) error {
+type MacNotifier struct {
+	once           sync.Once
+	notifierExists bool
+}
+
+func (m *MacNotifier) checkNotifier() {
+	m.once.Do(func() {
+		if _, err := exec.LookPath("terminal-notifier"); err != nil {
+			m.notifierExists = false
+		} else {
+			m.notifierExists = true
+		}
+	})
+}
+
+func (m *MacNotifier) Send(title, message, url string) error {
+	m.checkNotifier()
+
 	var cmd [3]string
-	if !notifierExists {
+	if !m.notifierExists {
 		cmd[0] = "osascript"
 		cmd[1] = "-e"
 		cmd[2] = fmt.Sprintf(`display notification "%s" with title "%s"`, message, title)
