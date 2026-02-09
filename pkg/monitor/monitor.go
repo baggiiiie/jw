@@ -31,14 +31,18 @@ type JobEvent struct {
 }
 
 // MonitorJob polls a Jenkins job for its status and emits events on the provided channel.
-func MonitorJob(jobURL, token string, logger *log.Logger, events chan<- JobEvent, stop <-chan struct{}) {
+func MonitorJob(jobURL, token string, logger *log.Logger, events chan<- JobEvent, pollInterval time.Duration, stop <-chan struct{}) {
+	if pollInterval <= 0 {
+		pollInterval = pollingInterval
+	}
+
 	jobName := strings.Split(jobURL, "/job/")
 	jobNameSafe := jobName[len(jobName)-1]
 
 	logger.Printf("Started monitoring: %s", jobNameSafe)
 	defer logger.Printf("Stopped monitoring: %s", jobNameSafe)
 
-	ticker := time.NewTicker(pollingInterval)
+	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
 
 	// Perform the first check immediately.
