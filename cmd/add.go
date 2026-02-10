@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"jenkins-monitor/pkg/config"
-	"jenkins-monitor/pkg/jenkins"
 	"jenkins-monitor/pkg/ui"
 
 	"github.com/spf13/cobra"
@@ -17,7 +16,7 @@ var addCmd = &cobra.Command{
 	Short: "Add a Jenkins job to monitor",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		if _, err := jenkins.GetCredentials(); err != nil {
+		if _, err := config.GetCredentials(); err != nil {
 			fmt.Println(ui.RedText("Error: " + err.Error()))
 			os.Exit(1)
 		}

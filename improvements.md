@@ -48,13 +48,13 @@ Pass `ConfigStore` to daemon/commands rather than using global `config.Load()`.
 - `cmd/daemon.go` has `getJenkinsToken()` with the same logic
 - `pkg/jenkins/jenkins.go` expects the token already encoded
 
-**Improvement:** Centralize in `pkg/jenkins`:
+**Improvement:** Centralize in `pkg/config`:
 
 ```go
 func GetCredentials() (string, error)  // Returns encoded token or error
 ```
 
-**Verdict:** ✅ VALID. `cmd/add.go:19-24` and `cmd/daemon.go:34-49` duplicate the same env var checking logic. Moving to `pkg/jenkins` would centralize this and allow `GetJobStatus` to handle its own auth instead of requiring pre-encoded tokens.
+**Verdict:** ✅ VALID. `cmd/add.go:19-24` and `cmd/daemon.go:34-49` duplicate the same env var checking logic. Moving to `pkg/config` (implemented 2026-02-10) centralizes this.
 
 ---
 

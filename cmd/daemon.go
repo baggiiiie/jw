@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"jenkins-monitor/pkg/config"
-	"jenkins-monitor/pkg/jenkins"
 	"jenkins-monitor/pkg/logging"
 	"jenkins-monitor/pkg/monitor"
 	"jenkins-monitor/pkg/notify"
@@ -208,7 +207,7 @@ func startDaemon(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	token, err := jenkins.GetCredentials()
+	token, err := config.GetCredentials()
 	if err != nil {
 		log.Fatalln(err)
 	}
