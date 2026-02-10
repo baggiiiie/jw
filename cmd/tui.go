@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"jenkins-monitor/pkg/color"
 	"jenkins-monitor/pkg/config"
+	"jenkins-monitor/pkg/ui"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -104,6 +104,6 @@ func runTUI() {
 	}
 
 	// Signal the ticker to stop.
-	fmt.Println(color.GreenText("All watched jobs finished! TUI exited."))
+	fmt.Println(ui.GreenText("All watched jobs finished! TUI exited."))
 	close(done)
 }

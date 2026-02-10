@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"jenkins-monitor/pkg/color"
 	"jenkins-monitor/pkg/config"
+	"jenkins-monitor/pkg/ui"
 	"jenkins-monitor/pkg/version"
 
 	"golang.org/x/mod/semver"
@@ -70,5 +70,5 @@ func fetchLatestVersion() (string, error) {
 
 func promptUpgrade(current, latest string) {
 	msg := fmt.Sprintf("\nNew version available: %s -> %s\nhttps://github.com/baggiiiie/jw/releases/latest\n", current, latest)
-	fmt.Println(color.MutedText(msg))
+	fmt.Println(ui.MutedText(msg))
 }

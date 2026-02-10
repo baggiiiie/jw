@@ -2,9 +2,9 @@ package cmd
 
 import (
 	"fmt"
-	"jenkins-monitor/pkg/color"
 	"jenkins-monitor/pkg/config"
 	"jenkins-monitor/pkg/pidfile"
+	"jenkins-monitor/pkg/ui"
 	"os"
 	"strings"
 	"time"
@@ -24,16 +24,16 @@ var statusCmd = &cobra.Command{
 			return
 		}
 		if pid, running := pidfile.IsDaemonRunning(); running {
-			fmt.Println(color.GreenText(fmt.Sprintf("Daemon running (PID: %d)", pid)))
+			fmt.Println(ui.GreenText(fmt.Sprintf("Daemon running (PID: %d)", pid)))
 		} else {
-			fmt.Println(color.RedText("Daemon not running."))
+			fmt.Println(ui.RedText("Daemon not running."))
 			return
 		}
 
 		store := config.NewDiskStore()
 		cfg, err := store.Load()
 		if err != nil {
-			fmt.Println(color.RedText(fmt.Sprintf("Error loading config: %v", err)))
+			fmt.Println(ui.RedText(fmt.Sprintf("Error loading config: %v", err)))
 			os.Exit(1)
 		}
 
@@ -47,7 +47,7 @@ var statusCmd = &cobra.Command{
 				url := strings.Join(urlParts[len(urlParts)-3:], "/")
 				line := fmt.Sprintf("  - %s (monitored for %s)", url, formatDuration(duration))
 				if job.LastCheckFailed {
-					fmt.Println(color.YellowText(line))
+					fmt.Println(ui.YellowText(line))
 				} else {
 					fmt.Println(line)
 				}

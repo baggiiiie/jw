@@ -1,4 +1,4 @@
-package color
+package ui
 
 const (
 	Green  = "\033[92m"

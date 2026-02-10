@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"encoding/base64"
 	"fmt"
 	"log"
 	"os"
@@ -10,6 +9,7 @@ import (
 	"time"
 
 	"jenkins-monitor/pkg/config"
+	"jenkins-monitor/pkg/jenkins"
 	"jenkins-monitor/pkg/logging"
 	"jenkins-monitor/pkg/monitor"
 	"jenkins-monitor/pkg/notify"
@@ -27,27 +27,6 @@ var startDaemonCmd = &cobra.Command{
 
 func init() {
 	RootCmd.AddCommand(startDaemonCmd)
-}
-
-// getJenkinsToken returns the base64-encoded credentials for Jenkins Basic Auth.
-// It supports two modes:
-// 1. JENKINS_USER + JENKINS_API_TOKEN: Combined and base64-encoded (like curl -u user:token)
-// 2. JENKINS_TOKEN: Used as-is (legacy, expects pre-encoded value)
-func getJenkinsToken() (string, error) {
-	user := os.Getenv("JENKINS_USER")
-	apiToken := os.Getenv("JENKINS_API_TOKEN")
-
-	if user != "" && apiToken != "" {
-		credentials := user + ":" + apiToken
-		return base64.StdEncoding.EncodeToString([]byte(credentials)), nil
-	}
-
-	token := os.Getenv("JENKINS_TOKEN")
-	if token != "" {
-		return token, nil
-	}
-
-	return "", nil
 }
 
 func handleJobEvent(event monitor.JobEvent, logger *log.Logger, store config.ConfigStore, activeJobs map[string]chan struct{}, notifier notify.Notifier) {
@@ -213,9 +192,9 @@ func startDaemon(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	token, _ := getJenkinsToken()
-	if token == "" {
-		log.Fatalln("Jenkins credentials not set! Set JENKINS_USER and JENKINS_API_TOKEN, or JENKINS_TOKEN")
+	token, err := jenkins.GetCredentials()
+	if err != nil {
+		log.Fatalln(err)
 	}
 
 	logger, err := logging.SetupLogger()

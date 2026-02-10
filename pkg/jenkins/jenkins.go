@@ -4,20 +4,25 @@ package jenkins
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
 	"time"
+
+	"jenkins-monitor/pkg/config"
 )
 
 // ErrNoCredentials is returned when no Jenkins credentials are configured.
-var ErrNoCredentials = fmt.Errorf("Jenkins credentials not set. Set JENKINS_USER and JENKINS_API_TOKEN, or JENKINS_TOKEN")
+var ErrNoCredentials = errors.New("Jenkins credentials not set. Set JENKINS_USER and JENKINS_API_TOKEN, or JENKINS_TOKEN, or run 'jw auth'")
 
 // GetCredentials returns the base64-encoded credentials for Jenkins Basic Auth.
 // It supports two modes:
 // 1. JENKINS_USER + JENKINS_API_TOKEN: Combined and base64-encoded (like curl -u user:token)
 // 2. JENKINS_TOKEN: Used as-is (legacy, expects pre-encoded value)
+// 3. ~/.jw/.credentials file: Checks for stored credentials if env vars are missing
 func GetCredentials() (string, error) {
+	// 1. Check environment variables first (highest priority)
 	user := os.Getenv("JENKINS_USER")
 	apiToken := os.Getenv("JENKINS_API_TOKEN")
 
@@ -29,6 +34,19 @@ func GetCredentials() (string, error) {
 	token := os.Getenv("JENKINS_TOKEN")
 	if token != "" {
 		return token, nil
+	}
+
+	// 2. Check credentials file
+	creds, err := config.LoadCredentials()
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return "", fmt.Errorf("loading credentials file: %w", err)
+	}
+	if creds != nil && creds.Username != "" && creds.Token != "" {
+		credentials := creds.Username + ":" + creds.Token
+		return base64.StdEncoding.EncodeToString([]byte(credentials)), nil
+	}
+	if creds != nil && creds.Token != "" {
+		return creds.Token, nil
 	}
 
 	return "", ErrNoCredentials
