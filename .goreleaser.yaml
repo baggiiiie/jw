@@ -1,0 +1,55 @@
+# .goreleaser.yaml
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X jenkins-monitor/pkg/version.Version={{.Version}}
+    main: ./main.go
+
+archives:
+  - format: tar.gz
+    # this name template makes the symbols manageable for homebrew
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+    # use zip for windows if you ever add it
+    format_overrides:
+      - goos: windows
+        format: zip
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
+      - Merge pull request
+      - Merge branch
+
+brews:
+  - name: jw
+    repository:
+      owner: baggiiiie
+      name: homebrew-tap
+      token: "{{ .Env.TAP_UPDATE_TOKEN }}"
+    directory: Formula
+    homepage: "https://github.com/baggiiiie/jw"
+    description: "A CLI tool to monitor Jenkins jobs"
+    install: |
+      bin.install "jw"
