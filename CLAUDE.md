@@ -9,7 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Build & Test Commands
 
 ```bash
-go build -o jw .                          # Build binary
+go build -o bin/jw .                      # Build binary
 go test ./...                             # Run all tests
 go test -v ./pkg/config                   # Run tests for a specific package
 go test -run TestAddJob ./pkg/config      # Run a single test
@@ -26,7 +26,7 @@ go install github.com/baggiiiie/jw@latest # Install from registry
 - `monitor` — Polling loop (`MonitorJob`) that checks job status every 30s, sends notifications, and updates config. Communicates completion back to daemon via channels.
 - `notify` — macOS-only notifications via `terminal-notifier` or `osascript` fallback.
 - `pidfile` — PID file management with self-healing (restores missing PID files via `pgrep`).
-- `logging`, `color`, `version`, `upgrade` — Supporting utilities.
+- `logging`, `ui`, `version`, `upgrade` — Supporting utilities.
 
 **Daemon lifecycle (`cmd/daemon.go`):** Signal-driven event loop using `select`. Responds to SIGHUP (reload config), SIGINT/SIGTERM (shutdown). Spawns a goroutine per monitored job with stop channels. Auto-shuts down when no jobs remain.
 

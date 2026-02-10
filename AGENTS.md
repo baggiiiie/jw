@@ -1,7 +1,7 @@
 # AGENTS.md
 
 ## Commands
-- Build: `go build -o jw .`
+- Build: `go build -o bin/jw .`
 - Test all: `go test ./...`
 - Test package: `go test -v ./pkg/config`
 - Test single: `go test -run TestAddJob ./pkg/config`
@@ -14,7 +14,7 @@ Go CLI daemon (module `jenkins-monitor`) that monitors Jenkins jobs and sends ma
 - `pkg/jenkins` — HTTP client for Jenkins REST API. Expects pre-encoded base64 credentials.
 - `pkg/monitor` — Polling loop (30s interval), sends notifications, updates config. Uses channels for completion.
 - `pkg/notify` — macOS notifications via `terminal-notifier` or `osascript` fallback.
-- `pkg/pidfile`, `pkg/logging`, `pkg/color`, `pkg/version`, `pkg/upgrade` — Supporting utilities.
+- `pkg/pidfile`, `pkg/logging`, `pkg/ui`, `pkg/version`, `pkg/upgrade` — Supporting utilities.
 
 ## Code Style
 - Standard Go conventions (`gofmt`). No comments unless complex. Use `fmt.Errorf` with `%w` for error wrapping.
