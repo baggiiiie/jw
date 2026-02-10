@@ -96,5 +96,3 @@ func AuthenticateAndGenerateToken(jenkinsURL, username, password string) (string
 
 	return tokenResp.Data.TokenValue, nil
 }
-
-

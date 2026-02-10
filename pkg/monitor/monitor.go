@@ -17,6 +17,8 @@ const (
 	EventStatusChecked EventKind = iota // routine status update
 	EventFinished                       // job completed (SUCCESS/FAILURE/ABORTED)
 	EventNotFound                       // job returned 404
+	EventUnauthorized                   // job returned 401
+	EventClientError                    // other non-transient 4xx
 	EventError                          // transient error polling
 )
 
@@ -64,9 +66,9 @@ func MonitorJob(jobURL, token string, logger *log.Logger, events chan<- JobEvent
 
 // checkJobStatus checks a Jenkins job's status and returns true if monitoring should stop.
 func checkJobStatus(jobURL, token, jobNameSafe string, logger *log.Logger, events chan<- JobEvent) (shouldStop bool) {
-	status, _, err := jenkins.GetJobStatus(jobURL, token)
+	status, statusCode, err := jenkins.GetJobStatus(jobURL, token)
 	if err != nil {
-		return handleJobStatusError(err, jobURL, jobNameSafe, logger, events)
+		return handleJobStatusError(err, statusCode, jobURL, jobNameSafe, logger, events)
 	}
 
 	logger.Printf("Received status for %s: Building=%v, Result=%s", jobNameSafe, status.Building, status.Result)
@@ -93,13 +95,37 @@ func checkJobStatus(jobURL, token, jobNameSafe string, logger *log.Logger, event
 }
 
 // handleJobStatusError handles errors from getting job status and returns true if monitoring should stop.
-func handleJobStatusError(err error, jobURL, jobNameSafe string, logger *log.Logger, events chan<- JobEvent) (shouldStop bool) {
-	if strings.Contains(err.Error(), "404") {
+func handleJobStatusError(err error, statusCode int, jobURL, jobNameSafe string, logger *log.Logger, events chan<- JobEvent) (shouldStop bool) {
+	if statusCode == 404 {
 		logger.Printf("Job '%s' not found (404). Removing.", jobNameSafe)
 		events <- JobEvent{
 			JobURL:  jobURL,
 			JobName: jobNameSafe,
 			Kind:    EventNotFound,
+			Failed:  true,
+			Error:   err,
+		}
+		return true
+	}
+
+	if statusCode == 401 || statusCode == 403 {
+		logger.Printf("Unauthorized for job '%s' (%d). Removing.", jobNameSafe, statusCode)
+		events <- JobEvent{
+			JobURL:  jobURL,
+			JobName: jobNameSafe,
+			Kind:    EventUnauthorized,
+			Failed:  true,
+			Error:   err,
+		}
+		return true
+	}
+
+	if statusCode >= 400 && statusCode < 500 && statusCode != 429 {
+		logger.Printf("Client error for job '%s' (%d). Removing.", jobNameSafe, statusCode)
+		events <- JobEvent{
+			JobURL:  jobURL,
+			JobName: jobNameSafe,
+			Kind:    EventClientError,
 			Failed:  true,
 			Error:   err,
 		}
@@ -116,5 +142,3 @@ func handleJobStatusError(err error, jobURL, jobNameSafe string, logger *log.Log
 	}
 	return false
 }
-
-

@@ -53,6 +53,22 @@ func handleJobEvent(event monitor.JobEvent, logger *log.Logger, store config.Con
 			event.JobURL,
 		)
 		removeJob(event.JobURL, logger, store, activeJobs)
+
+	case monitor.EventUnauthorized:
+		_ = notifier.Send(
+			"Jenkins Auth Failed",
+			fmt.Sprintf("Job: %s\nUnauthorized (401/403). Check credentials. Removing from monitor.", event.JobName),
+			event.JobURL,
+		)
+		removeJob(event.JobURL, logger, store, activeJobs)
+
+	case monitor.EventClientError:
+		_ = notifier.Send(
+			"Jenkins Request Error",
+			fmt.Sprintf("Job: %s\n%v. Removing from monitor.", event.JobName, event.Error),
+			event.JobURL,
+		)
+		removeJob(event.JobURL, logger, store, activeJobs)
 	}
 }
 
