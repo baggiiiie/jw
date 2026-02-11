@@ -62,6 +62,38 @@ jw logs               # View daemon logs
 jw status --tui       # Interactive TUI
 ```
 
+## Architecture
+
+```mermaid
+graph TD
+    CLI["CLI Commands<br/>add · remove · status · stop · logs · auth"]
+    Daemon["Daemon<br/>signal-driven event loop<br/>SIGHUP reload · SIGTERM shutdown"]
+    Monitor["Monitor<br/>poll every 30s per job"]
+    Config["Config Store<br/>file-locked read-modify-write"]
+    Notify["Notifier<br/>macOS notifications"]
+    PID["PID File<br/>self-healing"]
+
+    Jenkins["Jenkins API"]
+    FS["~/.jw/"]
+    macOS["terminal-notifier<br/>/ osascript"]
+
+    CLI -->|"spawn / SIGHUP"| Daemon
+    CLI -->|"read/write jobs"| Config
+    Daemon -->|"goroutine per job"| Monitor
+    Monitor -->|"JobEvent channel"| Daemon
+    Monitor -->|"HTTP poll"| Jenkins
+    Daemon -->|"on completion"| Notify
+    Daemon -->|"tick 5s"| PID
+    Config -->|"flock"| FS
+    PID --> FS
+    Notify --> macOS
+
+    classDef internal fill:#4a9eff,color:#fff
+    classDef ext fill:#f87171,color:#fff
+    class CLI,Daemon,Monitor,Config,Notify,PID internal
+    class Jenkins,FS,macOS ext
+```
+
 ## License
 
 MIT
