@@ -28,6 +28,9 @@ func RunCheck(store config.ConfigStore, cfg *config.Config) {
 	if strings.Contains(current, "-") {
 		current = strings.SplitN(current, "-", 2)[0]
 	}
+	if !strings.HasPrefix(current, "v") {
+		current = "v" + current
+	}
 
 	latest := cfg.UpgradeState.LatestVersion
 
