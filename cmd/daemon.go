@@ -68,6 +68,14 @@ func handleJobEvent(event monitor.JobEvent, logger *log.Logger, store config.Con
 			event.JobURL,
 		)
 		removeJob(event.JobURL, logger, store, activeJobs)
+
+	case monitor.EventDNSError:
+		_ = notifier.Send(
+			"Jenkins Job Unreachable",
+			fmt.Sprintf("Job: %s\nDNS lookup failed — host not found. Removing from monitor.", event.JobName),
+			event.JobURL,
+		)
+		removeJob(event.JobURL, logger, store, activeJobs)
 	}
 }
 

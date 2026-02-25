@@ -66,23 +66,26 @@ func handleNativeAdd(jobURL string) nativeResponse {
 	}
 
 	store := config.NewDiskStore()
-	cfg, err := store.Load()
-	if err != nil {
-		return nativeResponse{Error: fmt.Sprintf("failed to load config: %v", err)}
+	var already bool
+	if err := store.Update(func(cfg *config.Config) error {
+		if cfg.HasJob(jobURL) {
+			already = true
+			return nil
+		}
+		cfg.AddJob(jobURL)
+		return nil
+	}); err != nil {
+		return nativeResponse{Error: fmt.Sprintf("failed to update config: %v", err)}
 	}
 
-	if cfg.HasJob(jobURL) {
+	if already {
 		return nativeResponse{Success: true, Message: "Job is already being monitored"}
 	}
 
-	cfg.AddJob(jobURL)
-
-	if err := store.Save(cfg); err != nil {
-		return nativeResponse{Error: fmt.Sprintf("failed to save config: %v", err)}
+	// Start the daemon if it's not running, then signal it to pick up the new job.
+	if err := startDaemonIfNeeded(); err != nil {
+		return nativeResponse{Success: true, Message: "Job added but daemon failed to start: " + err.Error()}
 	}
-
-	// Best-effort: signal daemon if running, but don't fail if it's not.
-	// The daemon will be started lazily on the next CLI invocation.
 	if pid, running := pidfileIsDaemonRunning(); running {
 		if process, err := os.FindProcess(pid); err == nil {
 			process.Signal(syscall.SIGHUP)

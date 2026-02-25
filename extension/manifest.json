@@ -1,14 +1,19 @@
 {
-  "manifest_version": 3,
-  "name": "jw - Jenkins Job Monitor",
-  "version": "1.0",
-  "description": "Right-click on a Jenkins page to watch it with jw",
-  "permissions": ["contextMenus", "nativeMessaging"],
-  "background": {
-    "service_worker": "background.js"
-  },
-  "icons": {
-    "128": "icon.png"
-  },
-  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAr0s05VoLPn5VWgdXS1TmXlJPJlmDa94rqWfICFeuFJaGzmkdEH5aFEf3MPMaTKCBPJnJhPaIBPa1K1ESIyVsAtqJDIXRGMyCT6gLJqMbfFMJPho0sKD1wDMiipFQ8W9JGFPaKqE1AcOaxPqJvMzoByTKBImUfM/woGHqXklrnpCDIxj4fBJPBIBfCqhfbVOPqbd3hLPqFMNiAb5kGMiCQRhOSqOMj42GlDdJkqxK2oSCaIJk1cBryFHNYg3NiEH4dYMjc1eBGNfNUhL5g3oMbYLPUdSYaIgJy3JB8hZJONaqR5hVCmcPsGkcfi1TVclDqGhQniBjtzfR3NjwXQIDAQAB"
+    "manifest_version": 3,
+    "name": "jw - Jenkins Job Monitor",
+    "version": "0.0.1",
+    "description": "Right-click on a Jenkins page to watch it with jw",
+    "permissions": [
+        "contextMenus",
+        "nativeMessaging",
+        "scripting",
+        "activeTab"
+    ],
+    "background": {
+        "service_worker": "background.js"
+    },
+    "icons": {
+        "128": "icon.png"
+    },
+    "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAr0s05VoLPn5VWgdXS1TmXlJPJlmDa94rqWfICFeuFJaGzmkdEH5aFEf3MPMaTKCBPJnJhPaIBPa1K1ESIyVsAtqJDIXRGMyCT6gLJqMbfFMJPho0sKD1wDMiipFQ8W9JGFPaKqE1AcOaxPqJvMzoByTKBImUfM/woGHqXklrnpCDIxj4fBJPBIBfCqhfbVOPqbd3hLPqFMNiAb5kGMiCQRhOSqOMj42GlDdJkqxK2oSCaIJk1cBryFHNYg3NiEH4dYMjc1eBGNfNUhL5g3oMbYLPUdSYaIgJy3JB8hZJONaqR5hVCmcPsGkcfi1TVclDqGhQniBjtzfR3NjwXQIDAQAB"
 }
