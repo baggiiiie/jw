@@ -27,6 +27,8 @@ archives:
       {{- else if eq .Arch "386" }}i386
       {{- else }}{{ .Arch }}{{ end }}
       {{- if .Arm }}v{{ .Arm }}{{ end }}
+    files:
+      - extension/*
     # use zip for windows if you ever add it
     format_overrides:
       - goos: windows
@@ -53,3 +55,10 @@ brews:
     description: "A CLI tool to monitor Jenkins jobs"
     install: |
       bin.install "jw"
+      (share/"jw"/"extension").install Dir["extension/*"]
+    caveats: |
+      To install the Chrome extension:
+        1. Open chrome://extensions
+        2. Enable "Developer mode"
+        3. Click "Load unpacked" and select:
+           #{share}/jw/extension
