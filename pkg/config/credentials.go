@@ -10,7 +10,7 @@ import (
 )
 
 // ErrNoCredentials is returned when no Jenkins credentials are configured.
-var ErrNoCredentials = errors.New("Jenkins credentials not set. Set JENKINS_USER and JENKINS_API_TOKEN, or JENKINS_TOKEN, or run 'jw auth'")
+var ErrNoCredentials = errors.New("Jenkins credentials not set.\n- run 'jw auth'\n- or set JENKINS_USER and JENKINS_API_TOKEN, or JENKINS_TOKEN, manually")
 
 const credentialsFileName = ".credentials"
 
