@@ -72,6 +72,6 @@ func fetchLatestVersion() (string, error) {
 }
 
 func promptUpgrade(current, latest string) {
-	msg := fmt.Sprintf("\nNew version available: %s -> %s\nhttps://github.com/baggiiiie/jw/releases/latest\n", current, latest)
+	msg := fmt.Sprintf("\nNew version available: %s -> %s\nRun `brew install baggiiiie/tap/jw`\n", current, latest)
 	fmt.Println(ui.MutedText(msg))
 }

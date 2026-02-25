@@ -4,7 +4,7 @@ version: 2
 before:
   hooks:
     - go mod tidy
-    - sed -i '' 's/"version":.*"[^"]*"/"version": "{{.Version}}"/' extension/manifest.json
+    - "sed -i 's/\"version\":.*\"[^\"]*\"/\"version\": \"{{.Version}}\"/' extension/manifest.json"
 
 builds:
   - env:

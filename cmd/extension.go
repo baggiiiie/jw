@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"jenkins-monitor/pkg/ui"
 
@@ -106,9 +108,20 @@ func runExtensionInstall(cmd *cobra.Command, args []string) {
 	fmt.Printf("  Wrapper script: %s\n", wrapperPath)
 	fmt.Printf("  Host manifest:  %s\n", manifestPath)
 	fmt.Println()
+	// Determine extension path: prefer Homebrew share dir, fall back to relative
+	extensionPath := "extension/"
+	if out, err := exec.Command("brew", "--prefix").Output(); err == nil {
+		candidate := filepath.Join(strings.TrimSpace(string(out)), "share", "jw", "extension")
+		if info, err := os.Stat(candidate); err == nil && info.IsDir() {
+			extensionPath = candidate
+		}
+	}
+
 	fmt.Println("To load the Chrome extension:")
 	fmt.Println("  1. Open chrome://extensions")
 	fmt.Println("  2. Enable 'Developer mode'")
-	fmt.Println("  3. Click 'Load unpacked' and select the extension/ directory")
-	fmt.Println("  4. Right-click on any Jenkins page and select 'Watch with jw'")
+	fmt.Println("  3. Copy extension to your desired location:")
+	fmt.Printf("       `cp -r %s /path/to/extension`\n", extensionPath)
+	fmt.Println("  4. Click 'Load unpacked' and select extension")
+	fmt.Println("  5. Right-click on any Jenkins page and select 'Watch with jw'")
 }
