@@ -1,7 +1,9 @@
 package monitor
 
 import (
+	"errors"
 	"log"
+	"net"
 	"strings"
 	"time"
 
@@ -19,6 +21,7 @@ const (
 	EventNotFound                       // job returned 404
 	EventUnauthorized                   // job returned 401
 	EventClientError                    // other non-transient 4xx
+	EventDNSError                       // DNS resolution failed (invalid host)
 	EventError                          // transient error polling
 )
 
@@ -126,6 +129,20 @@ func handleJobStatusError(err error, statusCode int, jobURL, jobNameSafe string,
 			JobURL:  jobURL,
 			JobName: jobNameSafe,
 			Kind:    EventClientError,
+			Failed:  true,
+			Error:   err,
+		}
+		return true
+	}
+
+	// DNS resolution failure means the host doesn't exist — no point retrying.
+	var dnsErr *net.DNSError
+	if errors.As(err, &dnsErr) && dnsErr.IsNotFound {
+		logger.Printf("DNS lookup failed for job '%s': %v. Removing.", jobNameSafe, err)
+		events <- JobEvent{
+			JobURL:  jobURL,
+			JobName: jobNameSafe,
+			Kind:    EventDNSError,
 			Failed:  true,
 			Error:   err,
 		}
