@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os/exec"
+	"strings"
 	"sync"
 )
 
@@ -29,26 +30,34 @@ func (m *MacNotifier) checkNotifier() {
 func (m *MacNotifier) Send(title, message, url string) error {
 	m.checkNotifier()
 
-	var cmd [3]string
+	var result *exec.Cmd
 	if !m.notifierExists {
-		cmd[0] = "osascript"
-		cmd[1] = "-e"
-		cmd[2] = fmt.Sprintf(`display notification "%s" with title "%s"`, message, title)
+		script := fmt.Sprintf(
+			`display notification (do shell script "echo %s") with title (do shell script "echo %s")`,
+			shellQuote(message), shellQuote(title),
+		)
+		result = exec.Command("osascript", "-e", script)
 		log.Println("Couldn't find 'terminal-notifier' on host")
 	} else {
-		cmd[0] = "sh"
-		cmd[1] = "-c"
-		cmd[2] = fmt.Sprintf("terminal-notifier -message '%s' -title '%s' -sound ping -group 'jenkins_monitor'", message, title)
+		args := []string{
+			"-message", message,
+			"-title", title,
+			"-sound", "ping",
+			"-group", "jenkins_monitor",
+		}
+		if url != "" {
+			args = append(args, "-open", url)
+		}
+		result = exec.Command("terminal-notifier", args...)
 	}
 
-	if url != "" {
-		cmd[2] = fmt.Sprintf("%s -open %s", cmd[2], url)
-	}
-
-	result := exec.Command(cmd[0], cmd[1], cmd[2])
 	output, err := result.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to send notification: %w (output: %s)", err, string(output))
 	}
 	return nil
+}
+
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
 }

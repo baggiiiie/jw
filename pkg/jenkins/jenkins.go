@@ -4,10 +4,19 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 )
 
 const httpTimeout = 30 * time.Second
+
+type ContentTypeError struct {
+	ContentType string
+}
+
+func (e *ContentTypeError) Error() string {
+	return fmt.Sprintf("expected JSON response but got %q (server may require authentication or URL is not a Jenkins job)", e.ContentType)
+}
 
 type JobStatus struct {
 	Building  bool   `json:"building"`
@@ -40,6 +49,11 @@ func GetJobStatus(jenkinsURL, token string) (*JobStatus, int, error) {
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, resp.StatusCode, fmt.Errorf("http error: %s", resp.Status)
+	}
+
+	ct := resp.Header.Get("Content-Type")
+	if !strings.Contains(ct, "application/json") {
+		return nil, resp.StatusCode, &ContentTypeError{ContentType: ct}
 	}
 
 	var status JobStatus

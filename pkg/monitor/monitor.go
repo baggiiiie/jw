@@ -135,6 +135,20 @@ func handleJobStatusError(err error, statusCode int, jobURL, jobNameSafe string,
 		return true
 	}
 
+	// Non-JSON response means the URL is not a Jenkins endpoint — no point retrying.
+	var ctErr *jenkins.ContentTypeError
+	if errors.As(err, &ctErr) {
+		logger.Printf("Non-Jenkins URL for job '%s': %v. Removing.", jobNameSafe, err)
+		events <- JobEvent{
+			JobURL:  jobURL,
+			JobName: jobNameSafe,
+			Kind:    EventClientError,
+			Failed:  true,
+			Error:   err,
+		}
+		return true
+	}
+
 	// DNS resolution failure means the host doesn't exist — no point retrying.
 	var dnsErr *net.DNSError
 	if errors.As(err, &dnsErr) && dnsErr.IsNotFound {
