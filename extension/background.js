@@ -40,7 +40,7 @@ chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
     id: "watch-with-jw",
     title: "Watch with jw",
-    contexts: ["page"],
+    contexts: ["page", "link"],
     documentUrlPatterns: ["http://*/*", "https://*/*"],
   });
 });
@@ -48,7 +48,7 @@ chrome.runtime.onInstalled.addListener(() => {
 chrome.contextMenus.onClicked.addListener((info, tab) => {
   if (info.menuItemId !== "watch-with-jw") return;
 
-  const url = tab.url;
+  const url = info.linkUrl || tab?.url;
   if (!url) return;
 
   chrome.runtime.sendNativeMessage(
