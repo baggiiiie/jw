@@ -20,6 +20,7 @@ type MacNotifier struct {
 func (m *MacNotifier) checkNotifier() {
 	m.once.Do(func() {
 		if _, err := exec.LookPath("terminal-notifier"); err != nil {
+			log.Println("terminal-notifier not found in PATH")
 			m.notifierExists = false
 		} else {
 			m.notifierExists = true
@@ -37,8 +38,9 @@ func (m *MacNotifier) Send(title, message, url string) error {
 			shellQuote(message), shellQuote(title),
 		)
 		result = exec.Command("osascript", "-e", script)
-		log.Println("Couldn't find 'terminal-notifier' on host")
+		log.Println("Using osascript fallback (terminal-notifier not found in PATH)")
 	} else {
+		log.Println("Using terminal-notifier")
 		args := []string{
 			"-message", message,
 			"-title", title,
