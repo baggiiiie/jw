@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -60,6 +61,41 @@ func TestUpdateJobCheckStatus_NonExistentJob(t *testing.T) {
 	assert.False(t, changed, "expected UpdateJobCheckStatus to return false for non-existent job")
 
 	assert.Equal(t, 0, len(c.Jobs), "should not create job when updating non-existent")
+}
+
+func TestFinishJob(t *testing.T) {
+	c := &Config{Jobs: make(map[string]Job)}
+	url := "http://jenkins/job/test"
+	c.AddJob(url)
+
+	c.FinishJob(url, "SUCCESS")
+
+	assert.False(t, c.HasJob(url), "job should be removed from active jobs")
+	assert.Len(t, c.History, 1)
+	assert.Equal(t, url, c.History[0].URL)
+	assert.Equal(t, "SUCCESS", c.History[0].Result)
+	assert.False(t, c.History[0].FinishedTime.IsZero())
+	assert.False(t, c.History[0].StartTime.IsZero())
+}
+
+func TestFinishJob_NonExistent(t *testing.T) {
+	c := &Config{Jobs: make(map[string]Job)}
+	c.FinishJob("http://jenkins/job/nope", "SUCCESS")
+	assert.Empty(t, c.History)
+}
+
+func TestFinishJob_TrimsToMax(t *testing.T) {
+	c := &Config{Jobs: make(map[string]Job)}
+
+	for i := 0; i < 12; i++ {
+		url := fmt.Sprintf("http://jenkins/job/test%d", i)
+		c.AddJob(url)
+		c.FinishJob(url, "SUCCESS")
+	}
+
+	assert.Len(t, c.History, 10)
+	assert.Equal(t, "http://jenkins/job/test11", c.History[0].URL, "newest should be first")
+	assert.Equal(t, "http://jenkins/job/test2", c.History[9].URL, "oldest kept should be test2")
 }
 
 func TestUpdate_NoDeadlockWithDirectModification(t *testing.T) {

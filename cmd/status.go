@@ -6,6 +6,7 @@ import (
 	"jenkins-monitor/pkg/pidfile"
 	"jenkins-monitor/pkg/ui"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -50,6 +51,29 @@ var statusCmd = &cobra.Command{
 					fmt.Println(ui.YellowText(line))
 				} else {
 					fmt.Println(line)
+				}
+			}
+		}
+
+		if len(cfg.History) > 0 {
+			fmt.Printf("\nHistory (%d):\n", len(cfg.History))
+			sorted := make([]config.HistoryEntry, len(cfg.History))
+			copy(sorted, cfg.History)
+			sort.Slice(sorted, func(i, j int) bool {
+				return sorted[i].FinishedTime.After(sorted[j].FinishedTime)
+			})
+			for _, entry := range sorted {
+				urlParts := strings.Split(entry.URL, "/")
+				url := strings.Join(urlParts[len(urlParts)-3:], "/")
+				ago := formatDuration(time.Since(entry.FinishedTime))
+				line := fmt.Sprintf("  - %s [%s] (finished %s ago)", url, entry.Result, ago)
+				switch entry.Result {
+				case "SUCCESS":
+					fmt.Println(ui.GreenText(line))
+				case "FAILURE":
+					fmt.Println(ui.RedText(line))
+				default:
+					fmt.Println(ui.MutedText(line))
 				}
 			}
 		}

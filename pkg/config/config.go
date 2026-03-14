@@ -27,8 +27,18 @@ type UpgradeCheck struct {
 	LatestVersion string    `json:"latest_version"`
 }
 
+const maxHistoryEntries = 10
+
+type HistoryEntry struct {
+	URL          string    `json:"url"`
+	Result       string    `json:"result"`
+	FinishedTime time.Time `json:"finished_time"`
+	StartTime    time.Time `json:"start_time"`
+}
+
 type Config struct {
 	Jobs         map[string]Job `json:"jobs"`
+	History      []HistoryEntry `json:"history,omitempty"`
 	UpgradeState UpgradeCheck   `json:"upgrade_check"`
 }
 
@@ -138,6 +148,24 @@ func (c *Config) AddJob(jobURL string) {
 
 func (c *Config) RemoveJob(jobURL string) {
 	delete(c.Jobs, jobURL)
+}
+
+func (c *Config) FinishJob(jobURL string, result string) {
+	job, exists := c.Jobs[jobURL]
+	if !exists {
+		return
+	}
+	delete(c.Jobs, jobURL)
+	entry := HistoryEntry{
+		URL:          jobURL,
+		Result:       result,
+		FinishedTime: time.Now(),
+		StartTime:    job.StartTime,
+	}
+	c.History = append([]HistoryEntry{entry}, c.History...)
+	if len(c.History) > maxHistoryEntries {
+		c.History = c.History[:maxHistoryEntries]
+	}
 }
 
 func (c *Config) HasJob(jobURL string) bool {

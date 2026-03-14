@@ -43,7 +43,7 @@ func handleJobEvent(event monitor.JobEvent, logger *log.Logger, store config.Con
 		} else {
 			logger.Printf("Sent notification for %s", event.JobURL)
 		}
-		removeJob(event.JobURL, logger, store, activeJobs)
+		finishJob(event.JobURL, event.Result, logger, store, activeJobs)
 
 	case monitor.EventNotFound:
 		_ = notifier.Send(
@@ -91,6 +91,21 @@ func updateJobCheckStatus(jobURL string, failed bool, logger *log.Logger, store 
 	})
 	if err != nil {
 		logger.Printf("Error updating job check status in config: %v", err)
+	}
+}
+
+func finishJob(jobURL string, result string, logger *log.Logger, store config.ConfigStore, activeJobs map[string]chan struct{}) {
+	err := store.Update(func(cfg *config.Config) error {
+		cfg.FinishJob(jobURL, result)
+		return nil
+	})
+	if err != nil {
+		logger.Printf("Error finishing job in config: %v", err)
+	}
+
+	if stopChan, exists := activeJobs[jobURL]; exists {
+		delete(activeJobs, jobURL)
+		close(stopChan)
 	}
 }
 
